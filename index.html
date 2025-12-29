@@ -1557,8 +1557,26 @@
       </thead>
       <tbody id="lb-tbody-item"></tbody>
     </table>
+
+    <div class="section-title">4. Rincian Per Karung (Detail)</div>
+    <div id="lb-summary-detail" class="totals-box" style="display:none;"></div>
+    <table class="rak-table" id="lb-table-detail" style="margin-top:8px; display:none;">
+      <thead>
+        <tr>
+          <th>Rak ABF</th>
+          <th>Mesin</th>
+          <th>Karung ID</th>
+          <th>Item</th>
+          <th>Ekor</th>
+          <th>Kg</th>
+          <th>Tgl Produksi</th>
+        </tr>
+      </thead>
+      <tbody id="lb-tbody-detail"></tbody>
+    </table>
+
   </div>
-</div>	  
+</div>
 
           <!-- LAPORAN MUTASI PER ITEM (Saldo Awal + Mutasi + Saldo Akhir) -->
           <div id="page-laporan-mutasi" style="display:none;">
@@ -3392,15 +3410,16 @@ let tambahBatchInitialized = false;
       font-family: Arial, sans-serif;
     }
     .karung-label {
-      width: 95mm;
+      width: 100mm;
       height: 90mm;
       border: 1px solid #000;
+      padding: 4mm;
       margin-top: 0mm;
+      margin-right: 1mm;
+      margin-left: 1mm;
       margin-bottom: 0mm;
-	  margin-right: 2mm;
-	  margin-left: 2mm;
-	  padding: 30mm 4mm 4mm 4mm;
       box-sizing: border-box;
+      padding: 30mm 4mm 4mm 4mm;
       font-size: 10pt;
       display: flex;
       flex-direction: column;
@@ -5087,7 +5106,11 @@ function showDetailKarungForPallet(pallet, rows) {
   const lbTableItem   = document.getElementById('lb-table-item');
   const lbTbodyItem   = document.getElementById('lb-tbody-item');
 
-  async function initLaporanBatchOnce() {
+  
+  const lbSummaryDetail = document.getElementById('lb-summary-detail');
+  const lbTableDetail = document.getElementById('lb-table-detail');
+  const lbTbodyDetail = document.getElementById('lb-tbody-detail');
+async function initLaporanBatchOnce() {
     if (laporanBatchInitialized) return;
     laporanBatchInitialized = true;
 
@@ -5194,6 +5217,10 @@ function showDetailKarungForPallet(pallet, rows) {
     }
     if (lbTbodyItem) {
       lbTbodyItem.innerHTML = '';
+
+    if (lbSummaryDetail) lbSummaryDetail.style.display = 'none';
+    if (lbTableDetail) lbTableDetail.style.display = 'none';
+    if (lbTbodyDetail) lbTbodyDetail.innerHTML = '';
     }
   }
 
@@ -5243,7 +5270,7 @@ function showDetailKarungForPallet(pallet, rows) {
     // 2) Ambil daftar karung untuk batch ini
     const { data: karungData, error: karungError } = await sb
       .from('stok_karung')
-      .select('karung_id, item_id')
+      .select('karung_id, item_id, tgl_produksi')
       .eq('batch_pembekuan', batchId);
 
     if (karungError) {
@@ -5270,7 +5297,7 @@ function showDetailKarungForPallet(pallet, rows) {
     // 3) Ambil detail rak
     const { data: rakData, error: rakError } = await sb
       .from('karung_rak_abf')
-      .select('karung_id, rak_abf, qty_ekor, qty_kg')
+      .select('karung_id, rak_abf, mesin_abf, qty_ekor, qty_kg')
       .in('karung_id', karungIds);
 
     if (rakError) {
@@ -5313,11 +5340,13 @@ function showDetailKarungForPallet(pallet, rows) {
       }
     });
 
-    // Map karung -> item_id
+    // Map karung -> item_id, tgl_produksi
     const karungToItem = {};
+    const karungToTglProduksi = {};
     karungData.forEach(k => {
       if (k.karung_id) {
         karungToItem[k.karung_id] = k.item_id;
+        karungToTglProduksi[k.karung_id] = k.tgl_produksi || null;
       }
     });
 
@@ -5473,6 +5502,94 @@ function showDetailKarungForPallet(pallet, rows) {
           tr.appendChild(tdKg);
 
           lbTbodyItem.appendChild(tr);
+        });
+      }
+    }
+
+
+    // ========== RINCIAN PER KARUNG (DETAIL) ==========
+    // Konsep: sumber qty dari karung_rak_abf, batch & item & tgl_produksi dari stok_karung via karung_id.
+    const detailList = [];
+    rakData.forEach(r => {
+      const itemId = karungToItem[r.karung_id];
+      if (!itemId) return;
+
+      const itemName = itemNameMap[itemId] || itemId;
+      const rakAbf = r.rak_abf || '(Tanpa Rak)';
+
+      if (rakFilter !== 'ALL' && rakAbf !== rakFilter) return;
+
+      detailList.push({
+        rak_abf: rakAbf,
+        mesin_abf: r.mesin_abf || '',
+        karung_id: r.karung_id,
+        item_name: itemName,
+        qty_ekor: Number(r.qty_ekor) || 0,
+        qty_kg: Number(r.qty_kg) || 0,
+        tgl_produksi: karungToTglProduksi[r.karung_id] || null
+      });
+    });
+
+    // sort: item_name, lalu karung_id
+    detailList.sort((a, b) => {
+      const c = a.item_name.localeCompare(b.item_name);
+      if (c !== 0) return c;
+      return String(a.karung_id).localeCompare(String(b.karung_id));
+    });
+
+    if (detailList.length > 0) {
+      const totalEkorDetail = detailList.reduce((s, x) => s + (x.qty_ekor || 0), 0);
+      const totalKgDetail = detailList.reduce((s, x) => s + (x.qty_kg || 0), 0);
+
+      if (lbSummaryDetail) {
+        lbSummaryDetail.style.display = 'block';
+        const rakLabel = rakFilter === 'ALL' ? 'Semua Rak' : `Rak ${rakFilter}`;
+        lbSummaryDetail.textContent =
+          `Detail Batch ${batchId} - ${rakLabel}. ` +
+          `Total Baris: ${detailList.length.toLocaleString('id-ID')} | ` +
+          `Total Ekor: ${totalEkorDetail.toLocaleString('id-ID')} | ` +
+          `Total Kg: ${totalKgDetail.toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      }
+
+      if (lbTableDetail && lbTbodyDetail) {
+        lbTableDetail.style.display = 'table';
+        lbTbodyDetail.innerHTML = '';
+
+        detailList.forEach(row => {
+          const tr = document.createElement('tr');
+
+          const tdRak = document.createElement('td');
+          tdRak.textContent = row.rak_abf;
+          tr.appendChild(tdRak);
+
+          const tdMesin = document.createElement('td');
+          tdMesin.textContent = row.mesin_abf || '-';
+          tr.appendChild(tdMesin);
+
+          const tdKarung = document.createElement('td');
+          tdKarung.textContent = row.karung_id;
+          tr.appendChild(tdKarung);
+
+          const tdItem = document.createElement('td');
+          tdItem.textContent = row.item_name;
+          tr.appendChild(tdItem);
+
+          const tdEkor = document.createElement('td');
+          tdEkor.textContent = (row.qty_ekor || 0).toLocaleString('id-ID');
+          tr.appendChild(tdEkor);
+
+          const tdKg = document.createElement('td');
+          tdKg.textContent = (row.qty_kg || 0).toLocaleString('id-ID', {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+          });
+          tr.appendChild(tdKg);
+
+          const tdTgl = document.createElement('td');
+          tdTgl.textContent = row.tgl_produksi ? String(row.tgl_produksi).slice(0,10) : '-';
+          tr.appendChild(tdTgl);
+
+          lbTbodyDetail.appendChild(tr);
         });
       }
     }
