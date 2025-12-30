@@ -447,6 +447,7 @@
         <div class="menu-title">Menu Transaksi</div>
         <button class="menu-btn" data-page="form-tambah-batch">Batch ABF</button>
         <button class="menu-btn" data-page="form-tambah-karung">Panen ABF</button>
+        <button class="menu-btn" data-page="form-revisi-abf" id="menu-revisi-abf">Revisi Karung ABF (Supervisor)</button>
         <button class="menu-btn" data-page="form-buat-karung-draft">Buat Karung Baru</button>
         <button class="menu-btn" data-page="form-receipt-slip">Receipt Slip</button>
         <button class="menu-btn" data-page="form-pindah-lokasi">Form Pindah Pallet</button>
@@ -636,6 +637,109 @@
 
           <!-- FORM PINDAH LOKASI KARUNG -->
           
+
+          <!-- FORM REVISI KARUNG ABF (SUPERVISOR) -->
+          <div id="page-form-revisi-abf" style="display:none;">
+            <div class="container">
+              <div class="top-bar">
+                <div><strong>Revisi Karung ABF (Supervisor)</strong></div>
+                <div><span id="ra-userInfo"></span></div>
+              </div>
+
+              <div class="small-note" style="margin-bottom:10px;">
+                Form ini untuk koreksi data karung hasil panen ABF (item / tanggal produksi / ekor / kg) setelah label terlanjur dicetak.
+                Sistem akan mengubah data di <code>stok_karung</code> dan meng-update log ABF terkait di <code>log_karung</code> (tanpa mengubah <code>waktu_log</code>), serta mengisi kolom <code>edited_*</code>.
+              </div>
+
+              <div class="section-title">1. Cari Karung</div>
+              <div class="field-row">
+                <div class="field" style="flex:1 1 320px;">
+                  <label for="ra-karung-id">Karung ID (scan / ketik)</label>
+                  <input id="ra-karung-id" type="text" placeholder="KRG-YYMMDDXXXX atau hasil scan QR">
+                </div>
+                <div class="field" style="flex:0 0 200px;">
+                  <label>&nbsp;</label>
+                  <button type="button" class="btn btn-primary" id="ra-btn-load">Tampilkan Data</button>
+                </div>
+              </div>
+
+              <div id="ra-status" class="status" style="margin-top:8px;"></div>
+
+              <div class="section-title" style="margin-top:14px;">2. Data Karung Saat Ini</div>
+              <div class="field-row">
+                <div class="field">
+                  <label>Item</label>
+                  <input id="ra-cur-item" type="text" readonly>
+                </div>
+                <div class="field">
+                  <label>Tanggal Produksi</label>
+                  <input id="ra-cur-tgl" type="text" readonly>
+                </div>
+              </div>
+              <div class="field-row">
+                <div class="field">
+                  <label>Total (Ekor / Kg)</label>
+                  <input id="ra-cur-total" type="text" readonly>
+                </div>
+                <div class="field">
+                  <label>Sisa (Ekor / Kg)</label>
+                  <input id="ra-cur-sisa" type="text" readonly>
+                </div>
+              </div>
+              <div class="field-row">
+                <div class="field">
+                  <label>Status Karung</label>
+                  <input id="ra-cur-status" type="text" readonly>
+                </div>
+                <div class="field">
+                  <label>Batch Pembekuan</label>
+                  <input id="ra-cur-batch" type="text" readonly>
+                </div>
+              </div>
+
+              <div class="section-title" style="margin-top:14px;">3. Data Baru</div>
+              <div class="field-row">
+                <div class="field">
+                  <label for="ra-new-item">Item Baru</label>
+                  <select id="ra-new-item">
+                    <option value="">-- Pilih item --</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="ra-new-tgl">Tanggal Produksi Baru</label>
+                  <input id="ra-new-tgl" type="date">
+                </div>
+              </div>
+              <div class="field-row">
+                <div class="field">
+                  <label for="ra-new-ekor">Ekor Baru</label>
+                  <input id="ra-new-ekor" type="number" inputmode="numeric" min="0" step="1" placeholder="0">
+                </div>
+                <div class="field">
+                  <label for="ra-new-kg">Kg Baru</label>
+                  <input id="ra-new-kg" type="number" inputmode="decimal" min="0" step="0.01" placeholder="0.00">
+                </div>
+              </div>
+              <div class="field">
+                <label for="ra-reason">Alasan Revisi (wajib)</label>
+                <input id="ra-reason" type="text" placeholder="Contoh: Salah input kg (harusnya 25.40), koreksi dari tim timbang">
+              </div>
+
+              <div class="field-row" style="margin-top:10px;">
+                <div class="field" style="flex:0 0 240px;">
+                  <button type="button" class="btn btn-danger" id="ra-btn-submit" disabled>Submit Revisi</button>
+                </div>
+                <div class="field" style="flex:1 1 auto;">
+                  <div class="small-note">
+                    Setelah revisi, lakukan cetak ulang label melalui menu <b>Cek Info Karung</b> seperti biasa.
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          </div>
+
+
           <!-- ===== FORM BUAT KARUNG ID (DRAFT) ===== -->
           <div id="page-form-buat-karung-draft" style="display:none;">
             <div class="container">
@@ -1741,6 +1845,7 @@
   const pageLaporanStok       = document.getElementById('page-laporan-stok');
   const pageLaporanMutasi     = document.getElementById('page-laporan-mutasi');
   const pageFormTambahBatch = document.getElementById('page-form-tambah-batch');
+  const pageFormRevisiAbf   = document.getElementById('page-form-revisi-abf');
 
 
 
@@ -1751,6 +1856,7 @@
   let operatorDisplayName = '';
   let tambahKarungInitialized = false;
   let pindahLokasiInitialized = false;
+  let revisiAbfInitialized = false;
   let inputPalletInitialized = false;
   let cekKarungInitialized = false;
   let gabungKarungInitialized = false;
@@ -1837,6 +1943,7 @@
     }
 
     operatorDisplayName = fullName;
+    applyRoleMenuVisibility(role);
 
     userInfoEl.innerHTML = `
       ${fullName} <span class="badge-role">${role}</span><br/>
@@ -1848,6 +1955,20 @@
 
     await initTambahKarungOnce();
     await initPindahLokasiOnce();
+  }
+
+
+  function applyRoleMenuVisibility(role) {
+    try {
+      const r = (role || '').toLowerCase();
+      const isSupervisor = (r === 'supervisor' || r === 'admin');
+      const btn = document.querySelector('.menu-btn[data-page="form-revisi-abf"]');
+      if (btn) btn.style.display = isSupervisor ? 'block' : 'none';
+      // Jika user bukan supervisor, pastikan page tidak dapat dibuka via manual
+      if (!isSupervisor) {
+        // no-op; guard juga ada di initRevisiAbfOnce
+      }
+    } catch (e) { console.error(e); }
   }
 
   // ====== MENU HANDLER ======
@@ -1893,6 +2014,9 @@
       if (page === 'laporan-mutasi') {
       await initLaporanMutasiOnce();
       }
+      if (page === 'form-revisi-abf') {
+        await initRevisiAbfOnce();
+      }
       if (window.innerWidth <= 768) {
         appShellEl.classList.add('mobile-sidebar-collapsed');
       }
@@ -1925,6 +2049,7 @@
     setPageVisible(pageLaporanBatch,     (page === 'laporan-batch'));
     setPageVisible(pageLaporanStok,      (page === 'laporan-stok'));
     setPageVisible(pageLaporanMutasi,    (page === 'laporan-mutasi'));
+    setPageVisible(pageFormRevisiAbf,   (page === 'form-revisi-abf'));
   }
 
 
@@ -6438,6 +6563,261 @@ function openPickingSlipWindow(noDoc, header, detail) {
       ckQrRegion.style.display = 'none';
     }
   }
+
+
+  
+  // ============== REVISI KARUNG ABF (SUPERVISOR) ==============
+  const raUserInfoEl = document.getElementById('ra-userInfo');
+  const raKarungIdEl = document.getElementById('ra-karung-id');
+  const raBtnLoadEl  = document.getElementById('ra-btn-load');
+  const raStatusEl   = document.getElementById('ra-status');
+
+  const raCurItemEl  = document.getElementById('ra-cur-item');
+  const raCurTglEl   = document.getElementById('ra-cur-tgl');
+  const raCurTotalEl = document.getElementById('ra-cur-total');
+  const raCurSisaEl  = document.getElementById('ra-cur-sisa');
+  const raCurStatusEl= document.getElementById('ra-cur-status');
+  const raCurBatchEl = document.getElementById('ra-cur-batch');
+
+  const raNewItemEl  = document.getElementById('ra-new-item');
+  const raNewTglEl   = document.getElementById('ra-new-tgl');
+  const raNewEkorEl  = document.getElementById('ra-new-ekor');
+  const raNewKgEl    = document.getElementById('ra-new-kg');
+  const raReasonEl   = document.getElementById('ra-reason');
+  const raBtnSubmitEl= document.getElementById('ra-btn-submit');
+
+  let raLoadedKarung = null; // stok_karung row
+
+  function raSetStatus(msg, type='') {
+    if (!raStatusEl) return;
+    raStatusEl.textContent = msg || '';
+    raStatusEl.className = 'status' + (type ? ' ' + type : '');
+  }
+
+  function raClearCurrent() {
+    raLoadedKarung = null;
+    if (raCurItemEl) raCurItemEl.value = '';
+    if (raCurTglEl) raCurTglEl.value = '';
+    if (raCurTotalEl) raCurTotalEl.value = '';
+    if (raCurSisaEl) raCurSisaEl.value = '';
+    if (raCurStatusEl) raCurStatusEl.value = '';
+    if (raCurBatchEl) raCurBatchEl.value = '';
+    if (raBtnSubmitEl) raBtnSubmitEl.disabled = true;
+  }
+
+  function raFillCurrent(row, itemName) {
+    if (!row) return;
+    if (raCurItemEl) raCurItemEl.value = itemName || row.item_id || '';
+    if (raCurTglEl) raCurTglEl.value = row.tgl_produksi || '';
+    if (raCurTotalEl) raCurTotalEl.value = `${Number(row.qty_ekor ?? 0)} ekor / ${Number(row.qty_kg ?? 0).toFixed(2)} kg`;
+    if (raCurSisaEl) raCurSisaEl.value = `${Number(row.qty_ekor_sisa ?? 0)} ekor / ${Number(row.qty_kg_sisa ?? 0).toFixed(2)} kg`;
+    if (raCurStatusEl) raCurStatusEl.value = row.status_karung || '';
+    if (raCurBatchEl) raCurBatchEl.value = row.batch_pembekuan || '';
+  }
+
+  function raPrefillNew(row) {
+    if (!row) return;
+    if (raNewItemEl) raNewItemEl.value = row.item_id || '';
+    if (raNewTglEl) raNewTglEl.value = row.tgl_produksi || '';
+    if (raNewEkorEl) raNewEkorEl.value = (row.qty_ekor ?? 0);
+    if (raNewKgEl) raNewKgEl.value = Number(row.qty_kg ?? 0).toFixed(2);
+    if (raReasonEl) raReasonEl.value = '';
+  }
+
+  function raValidateReady() {
+    if (!raBtnSubmitEl) return;
+    const reasonOk = !!(raReasonEl && (raReasonEl.value || '').trim());
+    const itemOk = !!(raNewItemEl && (raNewItemEl.value || '').trim());
+    const tglOk = !!(raNewTglEl && (raNewTglEl.value || '').trim());
+    const kgVal = Number(raNewKgEl?.value ?? 0);
+    const kgOk = Number.isFinite(kgVal) && kgVal > 0;
+    const ekorVal = Number(raNewEkorEl?.value ?? 0);
+    const ekorOk = Number.isFinite(ekorVal) && ekorVal >= 0;
+    raBtnSubmitEl.disabled = !(raLoadedKarung && reasonOk && itemOk && tglOk && kgOk && ekorOk);
+  }
+
+  async function raLoadItemsOnce() {
+    if (!raNewItemEl) return;
+    // kalau already populated (punya option > 1), skip
+    if (raNewItemEl.options && raNewItemEl.options.length > 1) return;
+
+    const { data, error } = await sb
+      .from('items')
+      .select('item_id, item_name')
+      .order('item_name', { ascending: true });
+
+    if (error) {
+      console.error(error);
+      raSetStatus('Gagal memuat items: ' + error.message, 'error');
+      return;
+    }
+
+    const list = data || [];
+    raNewItemEl.innerHTML = '<option value="">-- Pilih item --</option>';
+    list.forEach(it => {
+      const opt = document.createElement('option');
+      opt.value = it.item_id;
+      opt.textContent = it.item_name;
+      raNewItemEl.appendChild(opt);
+    });
+  }
+
+  async function raFetchKarung(karungId) {
+    const { data, error } = await sb
+      .from('stok_karung')
+      // NOTE: schema Anda menggunakan pallet_id (bukan lokasi_penyimpanan). Untuk form revisi ABF,
+      // kita tidak membutuhkan info pallet untuk proses revisi, jadi tidak diambil di sini.
+      .select('karung_id, item_id, qty_ekor, qty_kg, qty_ekor_sisa, qty_kg_sisa, tgl_produksi, status_karung, batch_pembekuan')
+      .eq('karung_id', karungId)
+      .maybeSingle();
+
+    if (error) throw error;
+    return data || null;
+  }
+
+  async function raResolveItemName(itemId) {
+    if (!itemId) return '';
+    const { data, error } = await sb
+      .from('items')
+      .select('item_id, item_name')
+      .eq('item_id', itemId)
+      .maybeSingle();
+    if (error) return itemId;
+    return data?.item_name || itemId;
+  }
+
+  async function raHandleLoad() {
+    raClearCurrent();
+    const raw = raKarungIdEl?.value || '';
+    const karungId = normalizeKarungId(raw);
+    if (!karungId) {
+      raSetStatus('Masukkan/scan karung_id terlebih dahulu.', 'error');
+      return;
+    }
+
+    raSetStatus('Memuat data karung...', '');
+    try {
+      await raLoadItemsOnce();
+
+      const row = await raFetchKarung(karungId);
+      if (!row) {
+        raSetStatus('Karung tidak ditemukan di stok_karung.', 'error');
+        return;
+      }
+
+      const itemName = await raResolveItemName(row.item_id);
+
+      raLoadedKarung = row;
+      raFillCurrent(row, itemName);
+      raPrefillNew(row);
+
+      // Validasi guard client (mengikuti RPC)
+      const usedPartially = (Number(row.qty_ekor_sisa ?? 0) !== Number(row.qty_ekor ?? 0))
+                         || (Number(row.qty_kg_sisa ?? 0) !== Number(row.qty_kg ?? 0));
+      const st = (row.status_karung || '').toLowerCase();
+      if (usedPartially) {
+        raSetStatus("Karung sudah pernah dipakai sebagian (sisa != total). Revisi overwrite ditolak.", 'error');
+        raLoadedKarung = null;
+        raValidateReady();
+        return;
+      }
+      if (st === 'habis' || st === 'digabung') {
+        raSetStatus("Karung status 'habis' / 'digabung' tidak boleh direvisi.", 'error');
+        raLoadedKarung = null;
+        raValidateReady();
+        return;
+      }
+
+      raSetStatus('Data karung berhasil dimuat. Silakan isi data baru dan alasan revisi.', 'success');
+      raValidateReady();
+    } catch (e) {
+      console.error(e);
+      raSetStatus('Gagal memuat data: ' + (e?.message || e), 'error');
+    }
+  }
+
+  async function raHandleSubmit() {
+    if (!raLoadedKarung) { raSetStatus('Muat karung terlebih dahulu.', 'error'); return; }
+
+    const karungId = raLoadedKarung.karung_id;
+    const itemIdBaru = (raNewItemEl?.value || '').trim();
+    const tglBaru = raNewTglEl?.value || null;
+    const ekorBaru = Number(raNewEkorEl?.value ?? 0);
+    const kgBaru = Number(raNewKgEl?.value ?? 0);
+    const reason = (raReasonEl?.value || '').trim();
+
+    if (!reason) { raSetStatus('Alasan revisi wajib diisi.', 'error'); return; }
+
+    const role = (currentProfile?.role || '').toLowerCase();
+    const isSupervisor = (role === 'supervisor' || role === 'admin');
+    if (!isSupervisor) {
+      raSetStatus('Akses ditolak. Hanya supervisor/admin yang boleh revisi.', 'error');
+      return;
+    }
+
+    raSetStatus('Memproses revisi...', '');
+    if (raBtnSubmitEl) raBtnSubmitEl.disabled = true;
+
+    try {
+      const payload = {
+        p_karung_id: karungId,
+        p_item_id_baru: itemIdBaru,
+        p_tgl_produksi_baru: tglBaru,
+        p_qty_ekor_baru: ekorBaru,
+        p_qty_kg_baru: kgBaru,
+        p_supervisor_username: operatorDisplayName || 'supervisor',
+        p_reason: reason
+      };
+
+      const { error } = await sb.rpc('rpc_revisi_karung_overwrite_abf_log', payload);
+      if (error) throw error;
+
+      raSetStatus('Revisi berhasil. Data karung sudah diperbarui. Silakan reprint label melalui menu Cek Info Karung.', 'success');
+
+      // reload current
+      raKarungIdEl.value = karungId;
+      await raHandleLoad();
+    } catch (e) {
+      console.error(e);
+      raSetStatus('Gagal revisi: ' + (e?.message || e), 'error');
+      raValidateReady();
+    }
+  }
+
+  async function initRevisiAbfOnce() {
+    if (revisiAbfInitialized) return;
+    revisiAbfInitialized = true;
+
+    const role = (currentProfile?.role || '').toLowerCase();
+    const isSupervisor = (role === 'supervisor' || role === 'admin');
+    if (!isSupervisor) {
+      // Guard kalau user akses via URL/manual
+      raSetStatus('Akses ditolak. Menu ini hanya untuk supervisor/admin.', 'error');
+      return;
+    }
+
+    if (raUserInfoEl && operatorDisplayName) {
+      raUserInfoEl.textContent = operatorDisplayName + (role ? ` (${role})` : '');
+    }
+
+    await raLoadItemsOnce();
+
+    raBtnLoadEl?.addEventListener('click', raHandleLoad);
+    raKarungIdEl?.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); raHandleLoad(); }
+    });
+
+    [raNewItemEl, raNewTglEl, raNewEkorEl, raNewKgEl, raReasonEl].forEach(el => {
+      el?.addEventListener('input', raValidateReady);
+      el?.addEventListener('change', raValidateReady);
+    });
+
+    raBtnSubmitEl?.addEventListener('click', raHandleSubmit);
+
+    raClearCurrent();
+    raSetStatus('Siap. Masukkan/scan karung_id lalu klik "Tampilkan Data".', 'success');
+  }
+
 
 
   // ============== LAPORAN MUTASI PER ITEM (Saldo Awal + Mutasi + Saldo Akhir) ==============
