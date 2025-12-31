@@ -447,7 +447,6 @@
         <div class="menu-title">Menu Transaksi</div>
         <button class="menu-btn" data-page="form-tambah-batch">Batch ABF</button>
         <button class="menu-btn" data-page="form-tambah-karung">Panen ABF</button>
-        <button class="menu-btn" data-page="form-revisi-abf" id="menu-revisi-abf">Revisi Karung ABF (Supervisor)</button>
         <button class="menu-btn" data-page="form-buat-karung-draft">Buat Karung Baru</button>
         <button class="menu-btn" data-page="form-receipt-slip">Receipt Slip</button>
         <button class="menu-btn" data-page="form-pindah-lokasi">Form Pindah Pallet</button>
@@ -637,109 +636,6 @@
 
           <!-- FORM PINDAH LOKASI KARUNG -->
           
-
-          <!-- FORM REVISI KARUNG ABF (SUPERVISOR) -->
-          <div id="page-form-revisi-abf" style="display:none;">
-            <div class="container">
-              <div class="top-bar">
-                <div><strong>Revisi Karung ABF (Supervisor)</strong></div>
-                <div><span id="ra-userInfo"></span></div>
-              </div>
-
-              <div class="small-note" style="margin-bottom:10px;">
-                Form ini untuk koreksi data karung hasil panen ABF (item / tanggal produksi / ekor / kg) setelah label terlanjur dicetak.
-                Sistem akan mengubah data di <code>stok_karung</code> dan meng-update log ABF terkait di <code>log_karung</code> (tanpa mengubah <code>waktu_log</code>), serta mengisi kolom <code>edited_*</code>.
-              </div>
-
-              <div class="section-title">1. Cari Karung</div>
-              <div class="field-row">
-                <div class="field" style="flex:1 1 320px;">
-                  <label for="ra-karung-id">Karung ID (scan / ketik)</label>
-                  <input id="ra-karung-id" type="text" placeholder="KRG-YYMMDDXXXX atau hasil scan QR">
-                </div>
-                <div class="field" style="flex:0 0 200px;">
-                  <label>&nbsp;</label>
-                  <button type="button" class="btn btn-primary" id="ra-btn-load">Tampilkan Data</button>
-                </div>
-              </div>
-
-              <div id="ra-status" class="status" style="margin-top:8px;"></div>
-
-              <div class="section-title" style="margin-top:14px;">2. Data Karung Saat Ini</div>
-              <div class="field-row">
-                <div class="field">
-                  <label>Item</label>
-                  <input id="ra-cur-item" type="text" readonly>
-                </div>
-                <div class="field">
-                  <label>Tanggal Produksi</label>
-                  <input id="ra-cur-tgl" type="text" readonly>
-                </div>
-              </div>
-              <div class="field-row">
-                <div class="field">
-                  <label>Total (Ekor / Kg)</label>
-                  <input id="ra-cur-total" type="text" readonly>
-                </div>
-                <div class="field">
-                  <label>Sisa (Ekor / Kg)</label>
-                  <input id="ra-cur-sisa" type="text" readonly>
-                </div>
-              </div>
-              <div class="field-row">
-                <div class="field">
-                  <label>Status Karung</label>
-                  <input id="ra-cur-status" type="text" readonly>
-                </div>
-                <div class="field">
-                  <label>Batch Pembekuan</label>
-                  <input id="ra-cur-batch" type="text" readonly>
-                </div>
-              </div>
-
-              <div class="section-title" style="margin-top:14px;">3. Data Baru</div>
-              <div class="field-row">
-                <div class="field">
-                  <label for="ra-new-item">Item Baru</label>
-                  <select id="ra-new-item">
-                    <option value="">-- Pilih item --</option>
-                  </select>
-                </div>
-                <div class="field">
-                  <label for="ra-new-tgl">Tanggal Produksi Baru</label>
-                  <input id="ra-new-tgl" type="date">
-                </div>
-              </div>
-              <div class="field-row">
-                <div class="field">
-                  <label for="ra-new-ekor">Ekor Baru</label>
-                  <input id="ra-new-ekor" type="number" inputmode="numeric" min="0" step="1" placeholder="0">
-                </div>
-                <div class="field">
-                  <label for="ra-new-kg">Kg Baru</label>
-                  <input id="ra-new-kg" type="number" inputmode="decimal" min="0" step="0.01" placeholder="0.00">
-                </div>
-              </div>
-              <div class="field">
-                <label for="ra-reason">Alasan Revisi (wajib)</label>
-                <input id="ra-reason" type="text" placeholder="Contoh: Salah input kg (harusnya 25.40), koreksi dari tim timbang">
-              </div>
-
-              <div class="field-row" style="margin-top:10px;">
-                <div class="field" style="flex:0 0 240px;">
-                  <button type="button" class="btn btn-danger" id="ra-btn-submit" disabled>Submit Revisi</button>
-                </div>
-                <div class="field" style="flex:1 1 auto;">
-                  <div class="small-note">
-                    Setelah revisi, lakukan cetak ulang label melalui menu <b>Cek Info Karung</b> seperti biasa.
-                  </div>
-                </div>
-              </div>
-
-            </div>
-          </div>
-
-
           <!-- ===== FORM BUAT KARUNG ID (DRAFT) ===== -->
           <div id="page-form-buat-karung-draft" style="display:none;">
             <div class="container">
@@ -773,6 +669,15 @@
                   <label for="bd-kg">Kg</label>
                   <input type="number" id="bd-kg" inputmode="decimal" min="0" step="0.01" placeholder="0.00">
                 </div>
+              </div>
+
+              <!-- Admin-only: opsi langsung dianggap saldo awal (tanpa Receipt Slip manual) -->
+              <div class="field" id="bd-saldo-awal-wrap" style="display:none; margin-top:6px;">
+                <label style="display:flex; gap:10px; align-items:center; cursor:pointer;">
+                  <input type="checkbox" id="bd-saldo-awal" />
+                  <span><strong>Saldo awal</strong> (khusus admin)</span>
+                </label>
+                <div class="small-note">Jika dicentang, sistem akan otomatis mem-posting Receipt Slip sumber <b>saldo awal</b> untuk karung ini.</div>
               </div>
 <div class="actions">
                 <button id="bd-generate" class="primary">Generate & Print (1 Karung)</button>
@@ -1661,26 +1566,8 @@
       </thead>
       <tbody id="lb-tbody-item"></tbody>
     </table>
-
-    <div class="section-title">4. Rincian Per Karung (Detail)</div>
-    <div id="lb-summary-detail" class="totals-box" style="display:none;"></div>
-    <table class="rak-table" id="lb-table-detail" style="margin-top:8px; display:none;">
-      <thead>
-        <tr>
-          <th>Rak ABF</th>
-          <th>Mesin</th>
-          <th>Karung ID</th>
-          <th>Item</th>
-          <th>Ekor</th>
-          <th>Kg</th>
-          <th>Tgl Produksi</th>
-        </tr>
-      </thead>
-      <tbody id="lb-tbody-detail"></tbody>
-    </table>
-
   </div>
-</div>
+</div>	  
 
           <!-- LAPORAN MUTASI PER ITEM (Saldo Awal + Mutasi + Saldo Akhir) -->
           <div id="page-laporan-mutasi" style="display:none;">
@@ -1845,7 +1732,6 @@
   const pageLaporanStok       = document.getElementById('page-laporan-stok');
   const pageLaporanMutasi     = document.getElementById('page-laporan-mutasi');
   const pageFormTambahBatch = document.getElementById('page-form-tambah-batch');
-  const pageFormRevisiAbf   = document.getElementById('page-form-revisi-abf');
 
 
 
@@ -1856,7 +1742,6 @@
   let operatorDisplayName = '';
   let tambahKarungInitialized = false;
   let pindahLokasiInitialized = false;
-  let revisiAbfInitialized = false;
   let inputPalletInitialized = false;
   let cekKarungInitialized = false;
   let gabungKarungInitialized = false;
@@ -1943,7 +1828,6 @@
     }
 
     operatorDisplayName = fullName;
-    applyRoleMenuVisibility(role);
 
     userInfoEl.innerHTML = `
       ${fullName} <span class="badge-role">${role}</span><br/>
@@ -1955,20 +1839,6 @@
 
     await initTambahKarungOnce();
     await initPindahLokasiOnce();
-  }
-
-
-  function applyRoleMenuVisibility(role) {
-    try {
-      const r = (role || '').toLowerCase();
-      const isSupervisor = (r === 'supervisor' || r === 'admin');
-      const btn = document.querySelector('.menu-btn[data-page="form-revisi-abf"]');
-      if (btn) btn.style.display = isSupervisor ? 'block' : 'none';
-      // Jika user bukan supervisor, pastikan page tidak dapat dibuka via manual
-      if (!isSupervisor) {
-        // no-op; guard juga ada di initRevisiAbfOnce
-      }
-    } catch (e) { console.error(e); }
   }
 
   // ====== MENU HANDLER ======
@@ -2014,9 +1884,6 @@
       if (page === 'laporan-mutasi') {
       await initLaporanMutasiOnce();
       }
-      if (page === 'form-revisi-abf') {
-        await initRevisiAbfOnce();
-      }
       if (window.innerWidth <= 768) {
         appShellEl.classList.add('mobile-sidebar-collapsed');
       }
@@ -2049,7 +1916,6 @@
     setPageVisible(pageLaporanBatch,     (page === 'laporan-batch'));
     setPageVisible(pageLaporanStok,      (page === 'laporan-stok'));
     setPageVisible(pageLaporanMutasi,    (page === 'laporan-mutasi'));
-    setPageVisible(pageFormRevisiAbf,   (page === 'form-revisi-abf'));
   }
 
 
@@ -2158,9 +2024,81 @@
     const bdTglProd  = document.getElementById('bd-tgl-produksi');
     const bdEkor     = document.getElementById('bd-ekor');
     const bdKg       = document.getElementById('bd-kg');
-const bdGenerate = document.getElementById('bd-generate');
+    const bdSaldoAwalWrap = document.getElementById('bd-saldo-awal-wrap');
+    const bdSaldoAwalChk  = document.getElementById('bd-saldo-awal');
+    const bdGenerate = document.getElementById('bd-generate');
     const bdClear    = document.getElementById('bd-clear');
     const bdStatus   = document.getElementById('bd-status');
+
+    // Admin-only: tampilkan checkbox saldo awal
+    try {
+      const role = (currentProfile?.role || '').toLowerCase();
+      const isAdmin = (role === 'admin');
+      if (bdSaldoAwalWrap) bdSaldoAwalWrap.style.display = isAdmin ? 'block' : 'none';
+      if (!isAdmin && bdSaldoAwalChk) bdSaldoAwalChk.checked = false;
+    } catch (e) {
+      console.warn('bd saldo awal visibility error', e);
+      if (bdSaldoAwalWrap) bdSaldoAwalWrap.style.display = 'none';
+    }
+
+    async function bdAutoPostSaldoAwal(karungId) {
+      // Membuat Receipt Slip draft → add line → set qty → post sumber=awal
+      // Tujuan: karung draft langsung dianggap masuk sebagai saldo awal.
+      const role = (currentProfile?.role || '').toLowerCase();
+      if (role !== 'admin') throw new Error('Akses ditolak (admin saja).');
+      if (!karungId) throw new Error('karung_id tidak valid.');
+
+      // 1) Create receipt draft
+      const { data: hdr, error: e1 } = await sb.rpc('fn_receipt_create_draft', {});
+      if (e1) throw e1;
+      const receiptId = hdr?.receipt_id;
+      if (!receiptId) throw new Error('Gagal membuat receipt draft (receipt_id kosong).');
+
+      // 2) Add line
+      const { error: e2 } = await sb.rpc('fn_receipt_add_line', {
+        p_receipt_id: receiptId,
+        p_karung_id: karungId
+      });
+      if (e2) throw e2;
+
+      // 3) Pastikan qty line sesuai input form (jaga-jaga kalau default 0)
+      // Ambil line terakhir utk karung tsb
+      const { data: lines, error: e3 } = await sb
+        .from('barang_masuk_receipt_line')
+        .select('line_id, karung_id_input')
+        .eq('receipt_id', receiptId)
+        .eq('karung_id_input', karungId)
+        .order('line_id', { ascending: false })
+        .limit(1);
+      if (e3) throw e3;
+      const lineId = lines && lines[0] ? lines[0].line_id : null;
+      if (!lineId) throw new Error('Gagal menemukan receipt line untuk karung ini.');
+
+      const qtyEkor = parseInt(bdEkor.value || '0', 10) || 0;
+      const qtyKg   = parseFloat(bdKg.value || '0') || 0;
+      const { error: e4 } = await sb.rpc('fn_receipt_update_line_qty', {
+        p_line_id: lineId,
+        p_qty_ekor: qtyEkor,
+        p_qty_kg: qtyKg
+      });
+      if (e4) throw e4;
+
+      // 4) Post receipt (saldo awal)
+      const today = new Date();
+      const tglTerima = new Date(Date.UTC(today.getFullYear(), today.getMonth(), today.getDate()))
+        .toISOString().slice(0, 10);
+      const { error: e5 } = await sb.rpc('fn_receipt_post2', {
+        p_receipt_id: receiptId,
+        p_tgl_terima: tglTerima,
+        p_sumber: 'awal',
+        p_gudang_asal: null,
+        p_keterangan: 'saldo awal (auto)',
+        p_operator: operatorDisplayName || null
+      });
+      if (e5) throw e5;
+
+      return { receipt_id: receiptId, receipt_no: hdr?.receipt_no || null };
+    }
 
     if (bdUserInfo && operatorDisplayName) {
       const r = currentProfile && currentProfile.role ? currentProfile.role : 'operator';
@@ -2199,6 +2137,10 @@ const bdGenerate = document.getElementById('bd-generate');
       bdStatus.className = 'status';
 
       try {
+        const role = (currentProfile?.role || '').toLowerCase();
+        const isAdmin = (role === 'admin');
+        const isSaldoAwal = isAdmin && !!(bdSaldoAwalChk && bdSaldoAwalChk.checked);
+
         const itemId = (bdItemSel.value || '').trim();
         const tglProduksi = (bdTglProd.value || '').trim();
         const qtyEkor = parseInt(bdEkor.value || '0', 10) || 0;
@@ -2223,6 +2165,7 @@ if (!itemId) throw new Error('Item wajib dipilih.');
 
         // Ambil item name untuk label
         const itemName = bdItemSel.options[bdItemSel.selectedIndex]?.textContent || 'ITEM';
+        const catatan = '';
 
         bdStatus.textContent = 'Berhasil membuat draft: ' + karungId + '. Membuka jendela print...';
         bdStatus.className = 'status success';
@@ -2234,6 +2177,22 @@ if (!itemId) throw new Error('Item wajib dipilih.');
           totalEkor: qtyEkor,
           totalKg: qtyKg,
           catatan});
+
+        // Jika admin mencentang saldo awal, otomatis posting receipt sumber=awal
+        if (isSaldoAwal) {
+          bdStatus.textContent = 'Label dicetak. Mem-posting sebagai saldo awal...';
+          bdStatus.className = 'status';
+          try {
+            const posted = await bdAutoPostSaldoAwal(karungId);
+            const noTxt = posted?.receipt_no ? ` (Receipt: ${posted.receipt_no})` : '';
+            bdStatus.textContent = 'Saldo awal berhasil diposting untuk ' + karungId + noTxt;
+            bdStatus.className = 'status success';
+          } catch (e) {
+            console.error(e);
+            bdStatus.textContent = 'Karung draft berhasil dibuat, tapi gagal auto saldo awal: ' + (e?.message || e);
+            bdStatus.className = 'status error';
+          }
+        }
 
         // Reset form untuk input berikutnya
         bdEkor.value = '';
@@ -2252,6 +2211,7 @@ bdTglProd.focus();
       bdTglProd.value = '';
       bdEkor.value = '';
       bdKg.value = '';
+      if (bdSaldoAwalChk) bdSaldoAwalChk.checked = false;
 bdStatus.textContent = 'Form dikosongkan.';
       bdStatus.className = 'status';
     });
@@ -3412,7 +3372,54 @@ let tambahBatchInitialized = false;
     statusMessage.textContent = 'Menyimpan ke database...';
     statusMessage.className = 'status';
 
-    try {
+    
+try {
+      // ===== Validasi rak harus sudah didaftarkan pada batch (batch_abf_rak_mesin) =====
+      const cleanKey = (v) => String(v || '')
+        .replace(/[\u200B-\u200D\uFEFF]/g, '')  // hapus zero-width chars
+        .trim()
+        .toUpperCase();
+
+      const batchIdTrim = cleanKey(lastPreviewData.batchId);
+
+      const rakList = Array.from(new Set(
+        (lastPreviewData.rakData || [])
+          .map(r => cleanKey(r.rak_abf))
+          .filter(r => !!r)
+      ));
+// Jika ada rak, pastikan semua terdaftar & aktif pada batch
+      const rakToMesin = {};
+      if (rakList.length > 0) {
+        const { data: mapRows, error: mapErr } = await sb
+          .from('batch_abf_rak_mesin')
+          .select('rak_abf, mesin_abf, aktif')
+          .eq('batch_id', batchIdTrim)
+          .eq('aktif', true)
+          .in('rak_abf', rakList);
+
+        if (mapErr) {
+          console.error(mapErr);
+          statusMessage.textContent = 'Gagal validasi rak batch: ' + mapErr.message;
+          statusMessage.className = 'status error';
+          btnSubmitNew.disabled = false;
+          return;
+        }
+
+        (mapRows || []).forEach(r => {
+          const k = cleanKey(r.rak_abf);
+          if (k) rakToMesin[k] = r.mesin_abf;
+        });
+
+        const missing = rakList.filter(r => !(r in rakToMesin));
+        if (missing.length > 0) {
+          statusMessage.textContent =
+            `Gagal menyimpan: Rak ${missing.join(', ')} belum didaftarkan pada batch ${batchIdTrim}.`;
+          statusMessage.className = 'status error';
+          btnSubmitNew.disabled = false;
+          return;
+        }
+      }
+
       const { data: fnData, error: fnError } = await sb.rpc(
         'fn_barang_masuk_karung',
         {
@@ -3441,6 +3448,7 @@ let tambahBatchInitialized = false;
       const rowsToInsert = lastPreviewData.rakData.map(r => ({
         karung_id: karungId,
         rak_abf: r.rak_abf,
+        mesin_abf: (typeof rakToMesin !== 'undefined') ? (rakToMesin[String(r.rak_abf || '').trim()] ?? null) : null,
         qty_ekor: r.qty_ekor,
         qty_kg: r.qty_kg
       }));
@@ -3506,15 +3514,21 @@ let tambahBatchInitialized = false;
   }
 
   function openLabelWindow(karungId, preview) {
+    // Robust label print: avoid "callback is no longer runnable" by rendering QR inside
+    // the popup window and printing only after the popup fully loads.
     const payload = [
       karungId,
       preview.itemName,
       preview.tglProduksi,
       preview.totalEkor,
-      preview.totalKg.toFixed(2)
+      Number(preview.totalKg || 0).toFixed(2)
     ].join('|');
+
     const rawMemo = preview?.catatan ?? "";
-    const memoStr = (typeof rawMemo === "string") ? rawMemo : (typeof rawMemo === "number" ? String(rawMemo) : JSON.stringify(rawMemo));
+    const memoStr =
+      (typeof rawMemo === "string") ? rawMemo :
+      (typeof rawMemo === "number") ? String(rawMemo) :
+      JSON.stringify(rawMemo);
     const memoText = memoStr.substring(0, 200);
 
     const labelHTML = `
@@ -3529,20 +3543,12 @@ let tambahBatchInitialized = false;
       margin-left: 0;
       margin-right: 0;
     }
-    body {
-      margin: 0;
-      padding: 0;
-      font-family: Arial, sans-serif;
-    }
+    body { margin: 0; padding: 0; font-family: Arial, sans-serif; }
     .karung-label {
       width: 100mm;
       height: 90mm;
       border: 1px solid #000;
-      padding: 4mm;
-      margin-top: 0mm;
-      margin-right: 1mm;
-      margin-left: 1mm;
-      margin-bottom: 0mm;
+      margin: 0;
       box-sizing: border-box;
       padding: 30mm 4mm 4mm 4mm;
       font-size: 10pt;
@@ -3550,133 +3556,87 @@ let tambahBatchInitialized = false;
       flex-direction: column;
       justify-content: space-between;
     }
-    .label-header {
-      text-align: center;
-      font-weight: 700;
-      font-size: 14pt;
-      text-transform: uppercase;
-      margin-bottom: 2mm;
-    }
-    .label-status {
-      text-align: center;
-      font-weight: 800;
-      font-size: 12pt;
-      letter-spacing: 1px;
-      margin-top: 1mm;
-    }
-    .label-main {
-      flex: 1;
-      display: flex;
-      flex-direction: row;
-      gap: 4mm;
-    }
-    .label-left {
-      width: 38%;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      text-align: center;
-    }
-    .label-qr {
-      width: 35mm;
-      height: 35mm;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-    .label-karung-id {
-      margin-top: 2mm;
-      font-weight: 700;
-      font-size: 11pt;
-    }
-    .label-right {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-    }
-    .label-item-name {
-      text-align: center;
-      font-weight: 700;
-      font-size: 13pt;
-      margin-bottom: 3mm;
-    }
-    .label-row {
-      display: flex;
-      justify-content: space-between;
-      margin-bottom: 1.5mm;
-      font-size: 10pt;
-    }
-    .label-text {
-      font-weight: 600;
-    }
-    .label-memo {
-      margin-top: 2mm;
-      font-size: 9pt;
-      line-height: 1.2;
-      white-space: pre-wrap;
-      border-top: 1px dashed #aaa;
-      padding-top: 1.5mm;
-      max-height: 20mm;
-      overflow: hidden;
-    }
-    .label-footer {
-      border-top: 1px solid #000;
-      padding-top: 2mm;
-      text-align: center;
-      font-size: 9pt;
-    }
+    .label-header { text-align: center; font-weight: 700; font-size: 14pt; text-transform: uppercase; margin-bottom: 2mm; }
+    .label-status { text-align: center; font-weight: 800; font-size: 12pt; letter-spacing: 1px; margin-top: 1mm; }
+    .label-main { flex: 1; display: flex; flex-direction: row; gap: 4mm; }
+    .label-left { width: 38%; display: flex; flex-direction: column; align-items: center; text-align: center; }
+    .label-qr { width: 35mm; height: 35mm; display: flex; align-items: center; justify-content: center; }
+    .label-karung-id { margin-top: 2mm; font-weight: 700; font-size: 11pt; }
+    .label-right { flex: 1; display: flex; flex-direction: column; }
+    .label-item-name { text-align: center; font-weight: 700; font-size: 13pt; margin-bottom: 3mm; }
+    .label-row { display: flex; justify-content: space-between; margin-bottom: 1.5mm; font-size: 10pt; }
+    .label-text { font-weight: 600; }
+    .label-memo { margin-top: 2mm; font-size: 9pt; line-height: 1.2; white-space: pre-wrap; border-top: 1px dashed #aaa; padding-top: 1.5mm; }
   </style>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"><\/script>
 </head>
 <body>
   <div class="karung-label">
-    <div class="label-header">Kurnia's Food</div>
+    <div>
+      <div class="label-header">KURNIA'S FOOD</div>
+    </div>
+
     <div class="label-main">
       <div class="label-left">
-        <div class="label-qr"><div id="qrcode"></div></div>
-        <div class="label-karung-id">${karungId}</div>
+        <div id="qrcode" class="label-qr"></div>
+        <div class="label-karung-id">${escapeHtml(karungId)}</div>
       </div>
       <div class="label-right">
-        <div class="label-item-name">${preview.itemName}</div>
-        <div class="label-row">
-          <span class="label-text">Tgl Produksi</span>
-          <span class="label-value">${preview.tglProduksi}</span>
-        </div>
-        <div class="label-row">
-          <span class="label-text">Ekor / Bks</span>
-          <span class="label-value">${preview.totalEkor}</span>
-        </div>
-        <div class="label-row">
-          <span class="label-text">Berat</span>
-          <span class="label-value">${preview.totalKg.toFixed(2)} kg</span>
-        </div>
-        <div class="label-memo">${memoText}</div>
+        <div class="label-item-name">${escapeHtml(preview.itemName || '')}</div>
+        <div class="label-row"><span class="label-text">Tgl Produksi</span><span>${escapeHtml(preview.tglProduksi || '')}</span></div>
+        <div class="label-row"><span class="label-text">Ekor</span><span>${Number(preview.totalEkor || 0)}</span></div>
+        <div class="label-row"><span class="label-text">Kg</span><span>${Number(preview.totalKg || 0).toFixed(2)}</span></div>
+        ${memoText ? `<div class="label-memo">${escapeHtml(memoText)}</div>` : ``}
       </div>
     </div>
     <div class="label-footer">
       Produk ini harus disimpan di suhu -20°C
     </div>
   </div>
+
+  <script>
+    (function() {
+      const payload = ${JSON.stringify(payload)};
+
+      function safePrint() {
+        try {
+          window.focus();
+          // Give the browser a moment to paint the QR before printing
+          setTimeout(() => {
+            try { window.print(); } catch (e) { console.error('print failed', e); }
+          }, 200);
+        } catch (e) { console.error(e); }
+      }
+
+      function renderQrAndPrint() {
+        try {
+          const el = document.getElementById('qrcode');
+          if (typeof QRCode === 'function' && el) {
+            new QRCode(el, { text: payload, width: 140, height: 140 });
+          }
+        } catch (e) {
+          console.error('QR render failed', e);
+        } finally {
+          safePrint();
+        }
+      }
+
+      if (document.readyState === 'complete') renderQrAndPrint();
+      else window.addEventListener('load', renderQrAndPrint);
+    })();
+  <\/script>
 </body>
 </html>
-`;
-    const w = window.open("", "_blank", "width=500,height=700");
+    `;
+
+    const w = window.open('', '_blank');
+    if (!w) {
+      alert('Popup diblokir oleh browser. Izinkan popup untuk mencetak label.');
+      return;
+    }
     w.document.open();
     w.document.write(labelHTML);
     w.document.close();
-
-    const script = w.document.createElement('script');
-    script.src = "https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js";
-    script.onload = function () {
-      const qrContainer = w.document.getElementById("qrcode");
-      new w.QRCode(qrContainer, {
-        text: payload,
-        width: 140,
-        height: 140
-      });
-      w.focus();
-      w.print();
-    };
-    w.document.head.appendChild(script);
   }
 
   // ============== FORM PINDAH LOKASI LOGIC (incl. QR CAMERA) ==============
@@ -5231,11 +5191,7 @@ function showDetailKarungForPallet(pallet, rows) {
   const lbTableItem   = document.getElementById('lb-table-item');
   const lbTbodyItem   = document.getElementById('lb-tbody-item');
 
-  
-  const lbSummaryDetail = document.getElementById('lb-summary-detail');
-  const lbTableDetail = document.getElementById('lb-table-detail');
-  const lbTbodyDetail = document.getElementById('lb-tbody-detail');
-async function initLaporanBatchOnce() {
+  async function initLaporanBatchOnce() {
     if (laporanBatchInitialized) return;
     laporanBatchInitialized = true;
 
@@ -5342,10 +5298,6 @@ async function initLaporanBatchOnce() {
     }
     if (lbTbodyItem) {
       lbTbodyItem.innerHTML = '';
-
-    if (lbSummaryDetail) lbSummaryDetail.style.display = 'none';
-    if (lbTableDetail) lbTableDetail.style.display = 'none';
-    if (lbTbodyDetail) lbTbodyDetail.innerHTML = '';
     }
   }
 
@@ -5395,7 +5347,7 @@ async function initLaporanBatchOnce() {
     // 2) Ambil daftar karung untuk batch ini
     const { data: karungData, error: karungError } = await sb
       .from('stok_karung')
-      .select('karung_id, item_id, tgl_produksi')
+      .select('karung_id, item_id')
       .eq('batch_pembekuan', batchId);
 
     if (karungError) {
@@ -5422,7 +5374,7 @@ async function initLaporanBatchOnce() {
     // 3) Ambil detail rak
     const { data: rakData, error: rakError } = await sb
       .from('karung_rak_abf')
-      .select('karung_id, rak_abf, mesin_abf, qty_ekor, qty_kg')
+      .select('karung_id, rak_abf, qty_ekor, qty_kg')
       .in('karung_id', karungIds);
 
     if (rakError) {
@@ -5465,13 +5417,11 @@ async function initLaporanBatchOnce() {
       }
     });
 
-    // Map karung -> item_id, tgl_produksi
+    // Map karung -> item_id
     const karungToItem = {};
-    const karungToTglProduksi = {};
     karungData.forEach(k => {
       if (k.karung_id) {
         karungToItem[k.karung_id] = k.item_id;
-        karungToTglProduksi[k.karung_id] = k.tgl_produksi || null;
       }
     });
 
@@ -5627,94 +5577,6 @@ async function initLaporanBatchOnce() {
           tr.appendChild(tdKg);
 
           lbTbodyItem.appendChild(tr);
-        });
-      }
-    }
-
-
-    // ========== RINCIAN PER KARUNG (DETAIL) ==========
-    // Konsep: sumber qty dari karung_rak_abf, batch & item & tgl_produksi dari stok_karung via karung_id.
-    const detailList = [];
-    rakData.forEach(r => {
-      const itemId = karungToItem[r.karung_id];
-      if (!itemId) return;
-
-      const itemName = itemNameMap[itemId] || itemId;
-      const rakAbf = r.rak_abf || '(Tanpa Rak)';
-
-      if (rakFilter !== 'ALL' && rakAbf !== rakFilter) return;
-
-      detailList.push({
-        rak_abf: rakAbf,
-        mesin_abf: r.mesin_abf || '',
-        karung_id: r.karung_id,
-        item_name: itemName,
-        qty_ekor: Number(r.qty_ekor) || 0,
-        qty_kg: Number(r.qty_kg) || 0,
-        tgl_produksi: karungToTglProduksi[r.karung_id] || null
-      });
-    });
-
-    // sort: item_name, lalu karung_id
-    detailList.sort((a, b) => {
-      const c = a.item_name.localeCompare(b.item_name);
-      if (c !== 0) return c;
-      return String(a.karung_id).localeCompare(String(b.karung_id));
-    });
-
-    if (detailList.length > 0) {
-      const totalEkorDetail = detailList.reduce((s, x) => s + (x.qty_ekor || 0), 0);
-      const totalKgDetail = detailList.reduce((s, x) => s + (x.qty_kg || 0), 0);
-
-      if (lbSummaryDetail) {
-        lbSummaryDetail.style.display = 'block';
-        const rakLabel = rakFilter === 'ALL' ? 'Semua Rak' : `Rak ${rakFilter}`;
-        lbSummaryDetail.textContent =
-          `Detail Batch ${batchId} - ${rakLabel}. ` +
-          `Total Baris: ${detailList.length.toLocaleString('id-ID')} | ` +
-          `Total Ekor: ${totalEkorDetail.toLocaleString('id-ID')} | ` +
-          `Total Kg: ${totalKgDetail.toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-      }
-
-      if (lbTableDetail && lbTbodyDetail) {
-        lbTableDetail.style.display = 'table';
-        lbTbodyDetail.innerHTML = '';
-
-        detailList.forEach(row => {
-          const tr = document.createElement('tr');
-
-          const tdRak = document.createElement('td');
-          tdRak.textContent = row.rak_abf;
-          tr.appendChild(tdRak);
-
-          const tdMesin = document.createElement('td');
-          tdMesin.textContent = row.mesin_abf || '-';
-          tr.appendChild(tdMesin);
-
-          const tdKarung = document.createElement('td');
-          tdKarung.textContent = row.karung_id;
-          tr.appendChild(tdKarung);
-
-          const tdItem = document.createElement('td');
-          tdItem.textContent = row.item_name;
-          tr.appendChild(tdItem);
-
-          const tdEkor = document.createElement('td');
-          tdEkor.textContent = (row.qty_ekor || 0).toLocaleString('id-ID');
-          tr.appendChild(tdEkor);
-
-          const tdKg = document.createElement('td');
-          tdKg.textContent = (row.qty_kg || 0).toLocaleString('id-ID', {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2
-          });
-          tr.appendChild(tdKg);
-
-          const tdTgl = document.createElement('td');
-          tdTgl.textContent = row.tgl_produksi ? String(row.tgl_produksi).slice(0,10) : '-';
-          tr.appendChild(tdTgl);
-
-          lbTbodyDetail.appendChild(tr);
         });
       }
     }
@@ -6133,14 +5995,19 @@ function openPickingSlipWindow(noDoc, header, detail) {
         <td>${row.karung_id}</td>
         <td>${row.item_name || '-'}</td>
         <td>${row.sisa_ekor} / ${row.sisa_kg.toFixed(2)}</td>
-        <td><input type="number" min="0" step="1" value="${row.pindah_ekor}" style="width:90px" /></td>
-        <td><input type="number" min="0" step="0.01" value="${row.pindah_kg}" style="width:110px" /></td>
+        <td><input type="number" min="0" step="1" style="width:90px" /></td>
+        <td><input type="number" min="0" step="0.01" style="width:110px" /></td>
         <td><button class="btn btn-ghost btn-small">Hapus</button></td>
       `;
 
       const inputs = tr.querySelectorAll('input');
       const inpEkor = inputs[0];
       const inpKg = inputs[1];
+
+      // Set initial values via properties (avoid invalid value parsing in HTML)
+      inpEkor.value = String(row.pindah_ekor ?? 0);
+      inpKg.value   = String(Number(row.pindah_kg ?? 0));
+
       const btnDel = tr.querySelector('button');
 
       inpEkor.addEventListener('input', () => {
@@ -6563,261 +6430,6 @@ function openPickingSlipWindow(noDoc, header, detail) {
       ckQrRegion.style.display = 'none';
     }
   }
-
-
-  
-  // ============== REVISI KARUNG ABF (SUPERVISOR) ==============
-  const raUserInfoEl = document.getElementById('ra-userInfo');
-  const raKarungIdEl = document.getElementById('ra-karung-id');
-  const raBtnLoadEl  = document.getElementById('ra-btn-load');
-  const raStatusEl   = document.getElementById('ra-status');
-
-  const raCurItemEl  = document.getElementById('ra-cur-item');
-  const raCurTglEl   = document.getElementById('ra-cur-tgl');
-  const raCurTotalEl = document.getElementById('ra-cur-total');
-  const raCurSisaEl  = document.getElementById('ra-cur-sisa');
-  const raCurStatusEl= document.getElementById('ra-cur-status');
-  const raCurBatchEl = document.getElementById('ra-cur-batch');
-
-  const raNewItemEl  = document.getElementById('ra-new-item');
-  const raNewTglEl   = document.getElementById('ra-new-tgl');
-  const raNewEkorEl  = document.getElementById('ra-new-ekor');
-  const raNewKgEl    = document.getElementById('ra-new-kg');
-  const raReasonEl   = document.getElementById('ra-reason');
-  const raBtnSubmitEl= document.getElementById('ra-btn-submit');
-
-  let raLoadedKarung = null; // stok_karung row
-
-  function raSetStatus(msg, type='') {
-    if (!raStatusEl) return;
-    raStatusEl.textContent = msg || '';
-    raStatusEl.className = 'status' + (type ? ' ' + type : '');
-  }
-
-  function raClearCurrent() {
-    raLoadedKarung = null;
-    if (raCurItemEl) raCurItemEl.value = '';
-    if (raCurTglEl) raCurTglEl.value = '';
-    if (raCurTotalEl) raCurTotalEl.value = '';
-    if (raCurSisaEl) raCurSisaEl.value = '';
-    if (raCurStatusEl) raCurStatusEl.value = '';
-    if (raCurBatchEl) raCurBatchEl.value = '';
-    if (raBtnSubmitEl) raBtnSubmitEl.disabled = true;
-  }
-
-  function raFillCurrent(row, itemName) {
-    if (!row) return;
-    if (raCurItemEl) raCurItemEl.value = itemName || row.item_id || '';
-    if (raCurTglEl) raCurTglEl.value = row.tgl_produksi || '';
-    if (raCurTotalEl) raCurTotalEl.value = `${Number(row.qty_ekor ?? 0)} ekor / ${Number(row.qty_kg ?? 0).toFixed(2)} kg`;
-    if (raCurSisaEl) raCurSisaEl.value = `${Number(row.qty_ekor_sisa ?? 0)} ekor / ${Number(row.qty_kg_sisa ?? 0).toFixed(2)} kg`;
-    if (raCurStatusEl) raCurStatusEl.value = row.status_karung || '';
-    if (raCurBatchEl) raCurBatchEl.value = row.batch_pembekuan || '';
-  }
-
-  function raPrefillNew(row) {
-    if (!row) return;
-    if (raNewItemEl) raNewItemEl.value = row.item_id || '';
-    if (raNewTglEl) raNewTglEl.value = row.tgl_produksi || '';
-    if (raNewEkorEl) raNewEkorEl.value = (row.qty_ekor ?? 0);
-    if (raNewKgEl) raNewKgEl.value = Number(row.qty_kg ?? 0).toFixed(2);
-    if (raReasonEl) raReasonEl.value = '';
-  }
-
-  function raValidateReady() {
-    if (!raBtnSubmitEl) return;
-    const reasonOk = !!(raReasonEl && (raReasonEl.value || '').trim());
-    const itemOk = !!(raNewItemEl && (raNewItemEl.value || '').trim());
-    const tglOk = !!(raNewTglEl && (raNewTglEl.value || '').trim());
-    const kgVal = Number(raNewKgEl?.value ?? 0);
-    const kgOk = Number.isFinite(kgVal) && kgVal > 0;
-    const ekorVal = Number(raNewEkorEl?.value ?? 0);
-    const ekorOk = Number.isFinite(ekorVal) && ekorVal >= 0;
-    raBtnSubmitEl.disabled = !(raLoadedKarung && reasonOk && itemOk && tglOk && kgOk && ekorOk);
-  }
-
-  async function raLoadItemsOnce() {
-    if (!raNewItemEl) return;
-    // kalau already populated (punya option > 1), skip
-    if (raNewItemEl.options && raNewItemEl.options.length > 1) return;
-
-    const { data, error } = await sb
-      .from('items')
-      .select('item_id, item_name')
-      .order('item_name', { ascending: true });
-
-    if (error) {
-      console.error(error);
-      raSetStatus('Gagal memuat items: ' + error.message, 'error');
-      return;
-    }
-
-    const list = data || [];
-    raNewItemEl.innerHTML = '<option value="">-- Pilih item --</option>';
-    list.forEach(it => {
-      const opt = document.createElement('option');
-      opt.value = it.item_id;
-      opt.textContent = it.item_name;
-      raNewItemEl.appendChild(opt);
-    });
-  }
-
-  async function raFetchKarung(karungId) {
-    const { data, error } = await sb
-      .from('stok_karung')
-      // NOTE: schema Anda menggunakan pallet_id (bukan lokasi_penyimpanan). Untuk form revisi ABF,
-      // kita tidak membutuhkan info pallet untuk proses revisi, jadi tidak diambil di sini.
-      .select('karung_id, item_id, qty_ekor, qty_kg, qty_ekor_sisa, qty_kg_sisa, tgl_produksi, status_karung, batch_pembekuan')
-      .eq('karung_id', karungId)
-      .maybeSingle();
-
-    if (error) throw error;
-    return data || null;
-  }
-
-  async function raResolveItemName(itemId) {
-    if (!itemId) return '';
-    const { data, error } = await sb
-      .from('items')
-      .select('item_id, item_name')
-      .eq('item_id', itemId)
-      .maybeSingle();
-    if (error) return itemId;
-    return data?.item_name || itemId;
-  }
-
-  async function raHandleLoad() {
-    raClearCurrent();
-    const raw = raKarungIdEl?.value || '';
-    const karungId = normalizeKarungId(raw);
-    if (!karungId) {
-      raSetStatus('Masukkan/scan karung_id terlebih dahulu.', 'error');
-      return;
-    }
-
-    raSetStatus('Memuat data karung...', '');
-    try {
-      await raLoadItemsOnce();
-
-      const row = await raFetchKarung(karungId);
-      if (!row) {
-        raSetStatus('Karung tidak ditemukan di stok_karung.', 'error');
-        return;
-      }
-
-      const itemName = await raResolveItemName(row.item_id);
-
-      raLoadedKarung = row;
-      raFillCurrent(row, itemName);
-      raPrefillNew(row);
-
-      // Validasi guard client (mengikuti RPC)
-      const usedPartially = (Number(row.qty_ekor_sisa ?? 0) !== Number(row.qty_ekor ?? 0))
-                         || (Number(row.qty_kg_sisa ?? 0) !== Number(row.qty_kg ?? 0));
-      const st = (row.status_karung || '').toLowerCase();
-      if (usedPartially) {
-        raSetStatus("Karung sudah pernah dipakai sebagian (sisa != total). Revisi overwrite ditolak.", 'error');
-        raLoadedKarung = null;
-        raValidateReady();
-        return;
-      }
-      if (st === 'habis' || st === 'digabung') {
-        raSetStatus("Karung status 'habis' / 'digabung' tidak boleh direvisi.", 'error');
-        raLoadedKarung = null;
-        raValidateReady();
-        return;
-      }
-
-      raSetStatus('Data karung berhasil dimuat. Silakan isi data baru dan alasan revisi.', 'success');
-      raValidateReady();
-    } catch (e) {
-      console.error(e);
-      raSetStatus('Gagal memuat data: ' + (e?.message || e), 'error');
-    }
-  }
-
-  async function raHandleSubmit() {
-    if (!raLoadedKarung) { raSetStatus('Muat karung terlebih dahulu.', 'error'); return; }
-
-    const karungId = raLoadedKarung.karung_id;
-    const itemIdBaru = (raNewItemEl?.value || '').trim();
-    const tglBaru = raNewTglEl?.value || null;
-    const ekorBaru = Number(raNewEkorEl?.value ?? 0);
-    const kgBaru = Number(raNewKgEl?.value ?? 0);
-    const reason = (raReasonEl?.value || '').trim();
-
-    if (!reason) { raSetStatus('Alasan revisi wajib diisi.', 'error'); return; }
-
-    const role = (currentProfile?.role || '').toLowerCase();
-    const isSupervisor = (role === 'supervisor' || role === 'admin');
-    if (!isSupervisor) {
-      raSetStatus('Akses ditolak. Hanya supervisor/admin yang boleh revisi.', 'error');
-      return;
-    }
-
-    raSetStatus('Memproses revisi...', '');
-    if (raBtnSubmitEl) raBtnSubmitEl.disabled = true;
-
-    try {
-      const payload = {
-        p_karung_id: karungId,
-        p_item_id_baru: itemIdBaru,
-        p_tgl_produksi_baru: tglBaru,
-        p_qty_ekor_baru: ekorBaru,
-        p_qty_kg_baru: kgBaru,
-        p_supervisor_username: operatorDisplayName || 'supervisor',
-        p_reason: reason
-      };
-
-      const { error } = await sb.rpc('rpc_revisi_karung_overwrite_abf_log', payload);
-      if (error) throw error;
-
-      raSetStatus('Revisi berhasil. Data karung sudah diperbarui. Silakan reprint label melalui menu Cek Info Karung.', 'success');
-
-      // reload current
-      raKarungIdEl.value = karungId;
-      await raHandleLoad();
-    } catch (e) {
-      console.error(e);
-      raSetStatus('Gagal revisi: ' + (e?.message || e), 'error');
-      raValidateReady();
-    }
-  }
-
-  async function initRevisiAbfOnce() {
-    if (revisiAbfInitialized) return;
-    revisiAbfInitialized = true;
-
-    const role = (currentProfile?.role || '').toLowerCase();
-    const isSupervisor = (role === 'supervisor' || role === 'admin');
-    if (!isSupervisor) {
-      // Guard kalau user akses via URL/manual
-      raSetStatus('Akses ditolak. Menu ini hanya untuk supervisor/admin.', 'error');
-      return;
-    }
-
-    if (raUserInfoEl && operatorDisplayName) {
-      raUserInfoEl.textContent = operatorDisplayName + (role ? ` (${role})` : '');
-    }
-
-    await raLoadItemsOnce();
-
-    raBtnLoadEl?.addEventListener('click', raHandleLoad);
-    raKarungIdEl?.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') { e.preventDefault(); raHandleLoad(); }
-    });
-
-    [raNewItemEl, raNewTglEl, raNewEkorEl, raNewKgEl, raReasonEl].forEach(el => {
-      el?.addEventListener('input', raValidateReady);
-      el?.addEventListener('change', raValidateReady);
-    });
-
-    raBtnSubmitEl?.addEventListener('click', raHandleSubmit);
-
-    raClearCurrent();
-    raSetStatus('Siap. Masukkan/scan karung_id lalu klik "Tampilkan Data".', 'success');
-  }
-
 
 
   // ============== LAPORAN MUTASI PER ITEM (Saldo Awal + Mutasi + Saldo Akhir) ==============
