@@ -448,6 +448,7 @@
         <button class="menu-btn" data-page="form-tambah-batch">Batch ABF</button>
         <button class="menu-btn" data-page="form-tambah-karung">Panen ABF</button>
         <button class="menu-btn" data-page="form-buat-karung-draft">Buat Karung Baru</button>
+        <button class="menu-btn menu-supervisor-admin" data-page="form-revisi-karung" style="display:none;">Revisi Karung (ABF)</button>
         <button class="menu-btn" data-page="form-receipt-slip">Receipt Slip</button>
         <button class="menu-btn" data-page="form-pindah-lokasi">Form Pindah Pallet</button>
         <button class="menu-btn" data-page="form-input-pallet">Form Input Karung ke Pallet</button>
@@ -692,6 +693,89 @@
             </div>
           </div>
 
+
+<div id="page-form-revisi-karung" style="display:none;">
+            <div class="container">
+              <div class="top-bar">
+                <div><strong>Form Revisi Data Karung (ABF)</strong></div>
+                <div><span id="rv-userInfo"></span></div>
+              </div>
+
+              <div class="small-note">
+                Khusus <strong>Supervisor</strong> &amp; <strong>Admin</strong>. 
+                Masukkan <code>karung_id</code> untuk menampilkan data saat ini, lalu isi data revisi dan submit.
+              </div>
+
+              <div class="section-title">1. Cari Karung</div>
+              <div class="field-row">
+                <div class="field">
+                  <label for="rv-karung-id">Karung ID</label>
+                  <input type="text" id="rv-karung-id" placeholder="Scan/ketik karung_id lalu Enter" />
+                  <div class="small-note">Jika pakai barcode scanner model keyboard, biasanya otomatis kirim Enter.</div>
+                </div>
+                <div class="field" style="flex:0 0 180px;">
+                  <label>&nbsp;</label>
+                  <button type="button" class="btn btn-secondary btn-small" id="rv-btn-load">Load</button>
+                </div>
+                <div class="field" style="flex:0 0 180px;">
+                  <label>&nbsp;</label>
+                  <button type="button" class="btn btn-ghost btn-small" id="rv-btn-clear">Clear</button>
+                </div>
+              </div>
+
+              <div id="rv-status" class="status"></div>
+
+              <div class="divider"></div>
+
+              <div class="section-title">2. Data Saat Ini</div>
+              <div id="rv-current-box" class="totals-box" style="display:none;"></div>
+
+              <div class="divider"></div>
+
+              <div class="section-title">3. Data Revisi</div>
+              <div class="field">
+                <label for="rv-item">Item</label>
+                <select id="rv-item"></select>
+                <div class="small-note">Dropdown menampilkan <strong>item_name</strong>, yang disimpan adalah <strong>item_id</strong>.</div>
+              </div>
+
+              <div class="field-row">
+                <div class="field">
+                  <label for="rv-tgl-produksi">Tgl Produksi</label>
+                  <input type="date" id="rv-tgl-produksi" />
+                </div>
+                <div class="field">
+                  <label for="rv-ekor">Ekor</label>
+                  <input type="number" id="rv-ekor" inputmode="numeric" min="0" step="1" placeholder="0" />
+                </div>
+                <div class="field">
+                  <label for="rv-kg">Kg</label>
+                  <input type="number" id="rv-kg" inputmode="decimal" min="0" step="0.01" placeholder="0.00" />
+                </div>
+              </div>
+
+              <div class="field-row">
+                <div class="field">
+                  <label for="rv-batch">Batch Pembekuan</label>
+                  <input type="text" id="rv-batch" placeholder="BF-YYMMDDx" />
+                </div>
+                <div class="field">
+                  <label for="rv-pallet">Pallet</label>
+                  <input type="text" id="rv-pallet" placeholder="PLT-..." />
+                </div>
+              </div>
+
+              <div class="field">
+                <label for="rv-ket">Alasan Revisi (wajib)</label>
+                <input type="text" id="rv-ket" placeholder="Wajib diisi. Contoh: salah input item / koreksi hasil timbang" />
+              </div>
+
+              <div class="divider"></div>
+
+              <div class="section-title">4. Submit</div>
+              <button type="button" class="btn btn-primary" id="rv-btn-submit">Submit Revisi</button>
+            </div>
+          </div>
 
 <div id="page-form-receipt-slip" style="display:none;">
   <div class="container">
@@ -1566,10 +1650,28 @@
       </thead>
       <tbody id="lb-tbody-item"></tbody>
     </table>
-  </div>
-</div>	  
+  <div class="section-title">4. Rincian per Karung</div>
+    <div id="lb-summary-detail" class="totals-box" style="display:none;"></div>
+    <table class="rak-table" id="lb-table-detail" style="margin-top:8px; display:none;">
+      <thead>
+        <tr>
+          <th>Rak ABF</th>
+          <th>Karung ID</th>
+          <th>Item</th>
+          <th>Ekor</th>
+          <th>Kg</th>
+          <th>Tgl Produksi</th>
+        </tr>
+      </thead>
+      <tbody id="lb-tbody-detail"></tbody>
+    </table>
 
-          <!-- LAPORAN MUTASI PER ITEM (Saldo Awal + Mutasi + Saldo Akhir) -->
+	  
+
+          </div>
+</div>
+
+    <!-- LAPORAN MUTASI PER ITEM (Saldo Awal + Mutasi + Saldo Akhir) -->
           <div id="page-laporan-mutasi" style="display:none;">
             <div class="container">
               <div class="top-bar">
@@ -1727,6 +1829,7 @@
   const pageFormInputPallet  = document.getElementById('page-form-input-pallet');
   const pageFormCekKarung     = document.getElementById('page-form-cek-karung');
   const pageFormGabungKarung  = document.getElementById('page-form-gabung-karung');
+  const pageFormRevisiKarung  = document.getElementById('page-form-revisi-karung');
   const pageFormPickingSlip   = document.getElementById('page-form-picking-slip');
   const pageLaporanBatch      = document.getElementById('page-laporan-batch');
   const pageLaporanStok       = document.getElementById('page-laporan-stok');
@@ -1829,6 +1932,17 @@
 
     operatorDisplayName = fullName;
 
+    // Role-based menu visibility (only toggle items that are explicitly hidden)
+    try {
+      const r = (role || '').toLowerCase();
+      const canSeeSupervisorAdmin = (r === 'admin' || r === 'supervisor');
+      document.querySelectorAll('.menu-supervisor-admin').forEach(el => {
+        el.style.display = canSeeSupervisorAdmin ? 'block' : 'none';
+      });
+    } catch (e) {
+      console.warn('menu visibility error', e);
+    }
+
     userInfoEl.innerHTML = `
       ${fullName} <span class="badge-role">${role}</span><br/>
       <span style="font-size:0.75rem; color:#9ca3af;">${user.email}</span>
@@ -1868,6 +1982,9 @@
       }
       if (page === 'form-cek-karung') {
         await initCekKarungOnce();
+      }
+      if (page === 'form-revisi-karung') {
+        await initRevisiKarungOnce();
       }
       if (page === 'form-gabung-karung') {
         await initGabungKarungOnce();
@@ -1910,6 +2027,7 @@
     setPageVisible(pageFormPindahLokasi, (page === 'form-pindah-lokasi'));
     setPageVisible(pageFormInputPallet,  (page === 'form-input-pallet'));
     setPageVisible(pageFormCekKarung,    (page === 'form-cek-karung'));
+    setPageVisible(pageFormRevisiKarung,(page === 'form-revisi-karung'));
     setPageVisible(pageFormGabungKarung, (page === 'form-gabung-karung'));
     setPageVisible(pageFormTambahBatch,  (page === 'form-tambah-batch'));
     setPageVisible(pageFormPickingSlip,  (page === 'form-picking-slip'));
@@ -2409,7 +2527,11 @@ bdStatus.textContent = 'Form dikosongkan.';
   }
 
   async function rsAddKarung(rawId) {
-    if (!currentReceiptId) throw new Error('Receipt draft belum dibuat');
+    // Buat draft otomatis saat karung pertama ditambahkan
+    if (!currentReceiptId) {
+      await rsCreateDraft();
+      await rsFetchLines();
+    }
 
     const karungId = normalizeKarungId(rawId);
     if (!karungId) return;
@@ -2811,21 +2933,10 @@ bdStatus.textContent = 'Form dikosongkan.';
 
     await rsLoadSumberMasukEnum();
 
-    // create draft immediately
-    try {
-      await rsCreateDraft();
-      await rsFetchLines();
-      rsSetStatus('Draft dibuat. Silakan scan karung.', 'ok');
-
-      rsSetDisabled(false);
-      // persist current UI header values once (covers cases user already selected fields quickly)
-      try { await rsSaveHeader(); } catch(e) { console.warn('rsSaveHeader initial', e); }
-
-    } catch (e) {
-      console.error(e);
-      rsSetStatus('Gagal membuat draft receipt. Cek koneksi/RLS.', 'error');
-      return;
-    }
+    // Draft receipt TIDAK dibuat otomatis saat halaman dibuka.
+    // Draft akan dibuat otomatis saat karung pertama ditambahkan (menghindari draft kosong terbentuk tanpa aksi user).
+    rsSetStatus('Siap. Scan/isi Karung ID lalu tekan Enter. Draft akan dibuat otomatis saat karung pertama ditambahkan.', 'ok');
+    rsSetDisabled(false);
 
     // header behavior
     const sumberSel = document.getElementById('rs-sumber');
@@ -5191,6 +5302,10 @@ function showDetailKarungForPallet(pallet, rows) {
   const lbTableItem   = document.getElementById('lb-table-item');
   const lbTbodyItem   = document.getElementById('lb-tbody-item');
 
+  const lbSummaryDetail = document.getElementById('lb-summary-detail');
+  const lbTableDetail   = document.getElementById('lb-table-detail');
+  const lbTbodyDetail   = document.getElementById('lb-tbody-detail');
+
   async function initLaporanBatchOnce() {
     if (laporanBatchInitialized) return;
     laporanBatchInitialized = true;
@@ -5299,6 +5414,17 @@ function showDetailKarungForPallet(pallet, rows) {
     if (lbTbodyItem) {
       lbTbodyItem.innerHTML = '';
     }
+
+    if (lbSummaryDetail) {
+      lbSummaryDetail.style.display = 'none';
+      lbSummaryDetail.textContent = '';
+    }
+    if (lbTableDetail) {
+      lbTableDetail.style.display = 'none';
+    }
+    if (lbTbodyDetail) {
+      lbTbodyDetail.innerHTML = '';
+    }
   }
 
   async function tampilkanLaporanBatch() {
@@ -5347,7 +5473,7 @@ function showDetailKarungForPallet(pallet, rows) {
     // 2) Ambil daftar karung untuk batch ini
     const { data: karungData, error: karungError } = await sb
       .from('stok_karung')
-      .select('karung_id, item_id')
+      .select('karung_id, item_id, tgl_produksi')
       .eq('batch_pembekuan', batchId);
 
     if (karungError) {
@@ -5422,6 +5548,14 @@ function showDetailKarungForPallet(pallet, rows) {
     karungData.forEach(k => {
       if (k.karung_id) {
         karungToItem[k.karung_id] = k.item_id;
+      }
+    });
+
+    // Map karung -> tgl_produksi
+    const karungToTglProduksi = {};
+    karungData.forEach(k => {
+      if (k.karung_id) {
+        karungToTglProduksi[k.karung_id] = k.tgl_produksi || null;
       }
     });
 
@@ -5577,6 +5711,89 @@ function showDetailKarungForPallet(pallet, rows) {
           tr.appendChild(tdKg);
 
           lbTbodyItem.appendChild(tr);
+        });
+      }
+    }
+
+
+    // ========== RINCIAN PER KARUNG (DETAIL) ==========
+    // Konsep: sumber qty dari karung_rak_abf, batch & item & tgl_produksi dari stok_karung via karung_id.
+    const detailList = [];
+    rakData.forEach(r => {
+      const itemId = karungToItem[r.karung_id];
+      if (!itemId) return;
+
+      const itemName = itemNameMap[itemId] || itemId;
+      const rakAbf = r.rak_abf || '(Tanpa Rak)';
+
+      if (rakFilter !== 'ALL' && rakAbf !== rakFilter) return;
+
+      detailList.push({
+        rak_abf: rakAbf,
+        karung_id: r.karung_id,
+        item_name: itemName,
+        qty_ekor: Number(r.qty_ekor) || 0,
+        qty_kg: Number(r.qty_kg) || 0,
+        tgl_produksi: karungToTglProduksi[r.karung_id] || null
+      });
+    });
+
+    // sort: item_name, lalu karung_id
+    detailList.sort((a, b) => {
+      const c = a.item_name.localeCompare(b.item_name);
+      if (c !== 0) return c;
+      return String(a.karung_id).localeCompare(String(b.karung_id));
+    });
+
+    if (detailList.length > 0) {
+      const totalEkorDetail = detailList.reduce((s, x) => s + (x.qty_ekor || 0), 0);
+      const totalKgDetail = detailList.reduce((s, x) => s + (x.qty_kg || 0), 0);
+
+      if (lbSummaryDetail) {
+        lbSummaryDetail.style.display = 'block';
+        const rakLabel = rakFilter === 'ALL' ? 'Semua Rak' : `Rak ${rakFilter}`;
+        lbSummaryDetail.textContent =
+          `Detail Batch ${batchId} - ${rakLabel}. ` +
+          `Total Baris: ${detailList.length.toLocaleString('id-ID')} | ` +
+          `Total Ekor: ${totalEkorDetail.toLocaleString('id-ID')} | ` +
+          `Total Kg: ${totalKgDetail.toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      }
+
+      if (lbTableDetail && lbTbodyDetail) {
+        lbTableDetail.style.display = 'table';
+        lbTbodyDetail.innerHTML = '';
+
+        detailList.forEach(row => {
+          const tr = document.createElement('tr');
+
+          const tdRak = document.createElement('td');
+          tdRak.textContent = row.rak_abf;
+          tr.appendChild(tdRak);
+
+          const tdKarung = document.createElement('td');
+          tdKarung.textContent = row.karung_id;
+          tr.appendChild(tdKarung);
+
+          const tdItem = document.createElement('td');
+          tdItem.textContent = row.item_name;
+          tr.appendChild(tdItem);
+
+          const tdEkor = document.createElement('td');
+          tdEkor.textContent = (row.qty_ekor || 0).toLocaleString('id-ID');
+          tr.appendChild(tdEkor);
+
+          const tdKg = document.createElement('td');
+          tdKg.textContent = (row.qty_kg || 0).toLocaleString('id-ID', {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+          });
+          tr.appendChild(tdKg);
+
+          const tdTgl = document.createElement('td');
+          tdTgl.textContent = row.tgl_produksi ? String(row.tgl_produksi) : '-';
+          tr.appendChild(tdTgl);
+
+          lbTbodyDetail.appendChild(tr);
         });
       }
     }
@@ -6633,6 +6850,322 @@ function openPickingSlipWindow(noDoc, header, detail) {
     lmTableEl.style.display = 'table';
     lmSetStatus(`Sukses: ${rows.length.toLocaleString('id-ID')} item.`, 'success');
   }
+
+
+// FORM REVISI KARUNG (ABF)
+  // ==============================
+  const RV_RPC_NAME = 'rpc_revisi_karung_overwrite_abf_log'; // nama RPC revisi overwrite ABF
+
+  let revisiKarungInitialized = false;
+
+  async function initRevisiKarungOnce() {
+    if (revisiKarungInitialized) return;
+    revisiKarungInitialized = true;
+
+    const rvUserInfo = document.getElementById('rv-userInfo');
+    const rvStatus   = document.getElementById('rv-status');
+
+    const rvKarungId = document.getElementById('rv-karung-id');
+    const rvBtnLoad  = document.getElementById('rv-btn-load');
+    const rvBtnClear = document.getElementById('rv-btn-clear');
+
+    const rvCurrentBox = document.getElementById('rv-current-box');
+
+    const rvItem   = document.getElementById('rv-item');
+    const rvTgl    = document.getElementById('rv-tgl-produksi');
+    const rvEkor   = document.getElementById('rv-ekor');
+    const rvKg     = document.getElementById('rv-kg');
+    const rvBatch  = document.getElementById('rv-batch');
+    const rvPallet = document.getElementById('rv-pallet');
+    const rvKet    = document.getElementById('rv-ket');
+    const rvSubmit = document.getElementById('rv-btn-submit');
+
+    // Field legacy (batch/pallet) tidak dipakai untuk RPC overwrite ABF log
+    if (rvBatch) {
+      const row = rvBatch.closest('.field');
+      if (row) row.style.display = 'none';
+    }
+    if (rvPallet) {
+      const row = rvPallet.closest('.field');
+      if (row) row.style.display = 'none';
+    }
+
+
+    // NOTE: File basis (index.html) tidak memiliki helper deriveEffectiveRole/hasRole.
+    // Gunakan role apa adanya dari profile.
+    const role = String((currentProfile && currentProfile.role) ? currentProfile.role : 'operator').toLowerCase();
+    if (rvUserInfo && operatorDisplayName) {
+      rvUserInfo.textContent = operatorDisplayName + (role ? ` (${role})` : '');
+    }
+
+    // hard-guard: hanya supervisor/admin boleh submit
+    const canEdit = (role === 'admin' || role === 'supervisor');
+    if (!canEdit) {
+      rvStatus.textContent = 'Akses ditolak: hanya Supervisor/Admin yang bisa revisi.';
+      rvStatus.className = 'status error';
+      if (rvSubmit) rvSubmit.disabled = true;
+    }
+
+    function setStatus(msg, type) {
+      if (!rvStatus) return;
+      rvStatus.textContent = msg || '';
+      rvStatus.className = 'status' + (type ? (' ' + type) : '');
+    }
+
+    function clearForm() {
+      if (rvKarungId) rvKarungId.value = '';
+      if (rvCurrentBox) { rvCurrentBox.style.display = 'none'; rvCurrentBox.textContent = ''; }
+      if (rvItem) rvItem.value = '';
+      if (rvTgl) rvTgl.value = '';
+      if (rvEkor) rvEkor.value = '';
+      if (rvKg) rvKg.value = '';
+      if (rvBatch) rvBatch.value = '';
+      if (rvPallet) rvPallet.value = '';
+      if (rvKet) rvKet.value = '';
+      setStatus('', '');
+    }
+
+    async function ensureItemsLoaded() {
+      if (Array.isArray(items) && items.length > 0) return true;
+      const { data: itemData, error: itemError } = await sb
+        .from('items')
+        .select('item_id, item_name')
+        .order('item_name', { ascending: true });
+
+      if (itemError) {
+        console.error(itemError);
+        setStatus('Gagal memuat items: ' + itemError.message, 'error');
+        return false;
+      }
+      items = itemData || [];
+      return true;
+    }
+
+    function populateRvItemSelect(selectedId) {
+      if (!rvItem) return;
+      rvItem.innerHTML = '';
+      (items || []).forEach(it => {
+        const opt = document.createElement('option');
+        opt.value = it.item_id;
+        opt.textContent = it.item_name;
+        rvItem.appendChild(opt);
+      });
+      if (selectedId) rvItem.value = selectedId;
+      if (!rvItem.value && rvItem.options.length > 0) rvItem.selectedIndex = 0;
+    }
+
+    async function loadKarung() {
+      const kid = (rvKarungId && rvKarungId.value) ? rvKarungId.value.trim() : '';
+      if (!kid) {
+        setStatus('Isi karung_id terlebih dahulu.', 'error');
+        return;
+      }
+
+      setStatus('Memuat data karung...', '');
+      if (rvCurrentBox) { rvCurrentBox.style.display = 'none'; rvCurrentBox.textContent = ''; }
+
+      const okItems = await ensureItemsLoaded();
+      if (!okItems) return;
+
+      // Ambil data dari stok_karung
+      const { data: sk, error } = await sb
+        .from('stok_karung')
+        .select('karung_id, item_id, qty_ekor, qty_kg, qty_ekor_sisa, qty_kg_sisa, tgl_produksi, batch_pembekuan, status_karung, pallet_id')
+        .eq('karung_id', kid)
+        .maybeSingle();
+
+      if (error) {
+        console.error(error);
+        setStatus('Gagal memuat karung: ' + error.message, 'error');
+        return;
+      }
+      if (!sk) {
+        setStatus('Karung tidak ditemukan: ' + kid, 'error');
+        return;
+      }
+
+      // Render box "Data Saat Ini"
+      if (rvCurrentBox) {
+        const ekorSisa = Number(sk.qty_ekor_sisa ?? 0);
+        const kgSisa = Number(sk.qty_kg_sisa ?? 0);
+        rvCurrentBox.style.display = 'block';
+        rvCurrentBox.textContent =
+          `Karung: ${sk.karung_id}\n` +
+          `Status: ${sk.status_karung || '-'}\n` +
+          `Pallet: ${sk.pallet_id || '-'}\n` +
+          `Tgl Produksi: ${sk.tgl_produksi || '-'}\n` +
+          `Batch: ${sk.batch_pembekuan || '-'}\n` +
+          `Sisa: ${ekorSisa} ekor, ${kgSisa.toFixed(2)} kg`;
+      }
+
+      // Prefill form revisi
+      populateRvItemSelect(sk.item_id);
+      if (rvTgl) rvTgl.value = (sk.tgl_produksi || '');
+      if (rvEkor) rvEkor.value = (sk.qty_ekor ?? '');
+      if (rvKg) rvKg.value = (sk.qty_kg ?? '');
+      if (rvBatch) rvBatch.value = (sk.batch_pembekuan || '');
+      if (rvPallet) rvPallet.value = (sk.pallet_id || '');
+
+      setStatus('Data karung berhasil dimuat. Silakan isi perubahan lalu submit.', 'success');
+    }
+
+    async function syncKarungRakAbfTotals(karungId, newEkor, newKg) {
+      try {
+        // Ambil baris detail rak untuk karung ini
+        const { data: rows, error } = await sb
+          .from('karung_rak_abf')
+          .select('rak_abf, qty_ekor, qty_kg')
+          .eq('karung_id', karungId);
+
+        if (error) throw error;
+        if (!rows || rows.length === 0) return { updated: 0 };
+
+        const totalKgOld = rows.reduce((a, r) => a + (Number(r.qty_kg) || 0), 0);
+        const totalEkorOld = rows.reduce((a, r) => a + (Number(r.qty_ekor) || 0), 0);
+
+        // Jika tidak ada basis pembagi, tidak bisa distribusi
+        if (!(totalKgOld > 0) && !(totalEkorOld > 0)) return { updated: 0 };
+
+        // Distribusi proporsional berdasarkan KG (lebih stabil). Jika totalKgOld = 0, fallback ke ekor.
+        const useKg = (totalKgOld > 0);
+
+        // Hitung alokasi baru per rak
+        const alloc = rows.map(r => {
+          const base = useKg ? (Number(r.qty_kg) || 0) : (Number(r.qty_ekor) || 0);
+          const denom = useKg ? totalKgOld : totalEkorOld;
+          const ratio = denom > 0 ? (base / denom) : 0;
+          return {
+            rak_abf: r.rak_abf,
+            ratio
+          };
+        });
+
+        // KG: numeric(10,2) -> 2 desimal, pastikan jumlah tetap sama (penyesuaian remainder ke baris pertama)
+        let remainingKg = Number(newKg) || 0;
+        let remainingEkor = (newEkor === null || typeof newEkor === 'undefined') ? null : (Number(newEkor) || 0);
+
+        const updates = alloc.map((a, idx) => {
+          let kg = 0;
+          if (idx < alloc.length - 1) {
+            kg = Math.round((remainingKg * a.ratio) * 100) / 100;
+          } else {
+            kg = Math.round(remainingKg * 100) / 100;
+          }
+          remainingKg = Math.round((remainingKg - kg) * 100) / 100;
+
+          let ekor = null;
+          if (remainingEkor !== null) {
+            if (idx < alloc.length - 1) {
+              ekor = Math.floor(remainingEkor * a.ratio);
+            } else {
+              ekor = remainingEkor;
+            }
+            remainingEkor = remainingEkor - (ekor || 0);
+          }
+
+          return { rak_abf: a.rak_abf, qty_kg: kg, qty_ekor: ekor };
+        });
+
+        // Jalankan update per rak_abf
+        let updated = 0;
+        for (const u of updates) {
+          const patch = { qty_kg: u.qty_kg };
+          if (u.qty_ekor !== null) patch.qty_ekor = u.qty_ekor;
+
+          const { error: upErr } = await sb
+            .from('karung_rak_abf')
+            .update(patch)
+            .eq('karung_id', karungId)
+            .eq('rak_abf', u.rak_abf);
+
+          if (upErr) throw upErr;
+          updated += 1;
+        }
+
+        return { updated };
+      } catch (e) {
+        console.warn('Gagal sync karung_rak_abf:', e);
+        return { updated: 0, error: e };
+      }
+    }
+
+    function resetRevisiForm() {
+    if (rvKarungId) rvKarungId.value = '';
+    if (rvItem) rvItem.value = '';
+    if (rvTgl) rvTgl.value = '';
+    if (rvEkor) rvEkor.value = '';
+    if (rvKg) rvKg.value = '';
+    if (rvKet) rvKet.value = '';
+
+    const infoBox = document.getElementById('rv-current-info');
+    if (infoBox) infoBox.innerHTML = '';
+
+    if (rvKarungId) rvKarungId.focus();
+    }
+
+    async function submitRevisi() {
+      if (!canEdit) return;
+
+      const kid = (rvKarungId && rvKarungId.value) ? rvKarungId.value.trim() : '';
+      if (!kid) { setStatus('Karung ID wajib diisi.', 'error'); return; }
+
+      const payload = {
+        p_karung_id: kid,
+        p_item_id_baru: rvItem ? rvItem.value : null,
+        p_tgl_produksi_baru: rvTgl ? (rvTgl.value || null) : null,
+        p_qty_ekor_baru: (rvEkor && String(rvEkor.value).trim() !== '') ? Number(rvEkor.value) : null,
+        p_qty_kg_baru: rvKg ? Number(rvKg.value || 0) : 0,
+        p_reason: rvKet ? (rvKet.value || '').trim() : '',
+        p_supervisor_username: (currentUser && currentUser.email) ? currentUser.email : (operatorDisplayName || '')
+      };
+
+
+      if (!payload.p_item_id_baru) { setStatus('Item wajib dipilih.', 'error'); return; }
+      if (!payload.p_tgl_produksi_baru) { setStatus('Tgl produksi wajib diisi.', 'error'); return; }
+      if (!(payload.p_qty_kg_baru > 0)) { setStatus('Kg wajib > 0.', 'error'); return; }
+      if (!payload.p_reason) { setStatus('Alasan revisi wajib diisi.', 'error'); return; }
+
+      if (!confirm('Submit revisi untuk karung ini? Pastikan data benar.')) return;
+
+      setStatus('Memproses revisi...', '');
+      const { data, error } = await sb.rpc(RV_RPC_NAME, payload);
+
+      if (error) {
+        console.error(error);
+        setStatus('Gagal revisi: ' + error.message, 'error');
+        return;
+      }
+
+      setStatus('Data karung selesai direvisi. Harap print label dari Cek Info Karung.',
+      'success'
+      );
+
+      // Sinkronkan total di karung_rak_abf (proporsional berdasarkan komposisi rak lama)
+      const syncRes = await syncKarungRakAbfTotals(kid, payload.p_qty_ekor_baru, payload.p_qty_kg_baru);
+      if (syncRes && syncRes.updated > 0) {
+        setStatus('Revisi berhasil disimpan. Detail rak juga diperbarui. Harap print label dari Cek Info Karung.', 'success');
+      }
+
+      // reload data untuk memastikan yang tampil sudah terbaru
+      resetRevisiForm();;
+    }
+
+    // attach listeners
+    if (rvBtnLoad) rvBtnLoad.addEventListener('click', loadKarung);
+    if (rvBtnClear) rvBtnClear.addEventListener('click', clearForm);
+    if (rvKarungId) rvKarungId.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') loadKarung();
+    });
+    if (rvSubmit) rvSubmit.addEventListener('click', submitRevisi);
+
+    // initial state
+    await ensureItemsLoaded();
+    populateRvItemSelect();
+    setStatus('Form Revisi siap. Masukkan karung_id untuk mulai.', '');
+  }
+
+
+
 </script>
 </body>
 </html>
