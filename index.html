@@ -3661,13 +3661,14 @@ try {
       border: 1px solid #000;
       margin: 0;
       box-sizing: border-box;
-      padding: 30mm 4mm 4mm 4mm;
+      padding: 20mm 4mm 4mm 4mm;
       font-size: 10pt;
       display: flex;
       flex-direction: column;
       justify-content: space-between;
     }
-    .label-header { text-align: center; font-weight: 700; font-size: 14pt; text-transform: uppercase; margin-bottom: 2mm; }
+    .label-header { text-align: center; font-weight: 700; font-size: 14pt; text-transform: uppercase; margin-bottom: 0; }
+	.label-header-karung { text-align: center; font-weight: 600; font-size: 10pt; margin-bottom: 2mm; }
     .label-status { text-align: center; font-weight: 800; font-size: 12pt; letter-spacing: 1px; margin-top: 1mm; }
     .label-main { flex: 1; display: flex; flex-direction: row; gap: 4mm; }
     .label-left { width: 38%; display: flex; flex-direction: column; align-items: center; text-align: center; }
@@ -3678,6 +3679,7 @@ try {
     .label-row { display: flex; justify-content: space-between; margin-bottom: 1.5mm; font-size: 10pt; }
     .label-text { font-weight: 600; }
     .label-memo { margin-top: 2mm; font-size: 9pt; line-height: 1.2; white-space: pre-wrap; border-top: 1px dashed #aaa; padding-top: 1.5mm; }
+	.label-footer{ text-align: center;font-size: 8pt;font-weight: 600;padding-top: 2mm;border-top: 1px solid #000;margin-top: 1mm;}
   </style>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"><\/script>
 </head>
@@ -3685,6 +3687,7 @@ try {
   <div class="karung-label">
     <div>
       <div class="label-header">KURNIA'S FOOD</div>
+	  <div class="label-header-karung">${escapeHtml(karungId)}</div>
     </div>
 
     <div class="label-main">
