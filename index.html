@@ -456,6 +456,8 @@
         <button class="menu-btn" data-page="form-gabung-karung">Form Gabung Karung</button>
         <button class="menu-btn" data-page="form-picking-slip">Picking Slip</button>
 
+        <button class="menu-btn" data-page="riwayat-picking-slip">Riwayat Picking Slip</button>
+
         <div class="menu-title" style="margin-top:10px;">Menu Laporan</div>
         <button class="menu-btn" data-page="form-cek-karung">Cek Info Karung</button>
         <button class="menu-btn" data-page="laporan-stok">Laporan Stok Karung</button>
@@ -1522,7 +1524,70 @@
 
 
           <!-- LAPORAN STOK PER ITEM & PALLET -->
-          <div id="page-laporan-stok" style="display:none;">
+          
+          <!-- RIWAYAT PICKING SLIP -->
+          <div id="page-riwayat-picking-slip" style="display:none;">
+            <div class="container">
+              <div class="top-bar">
+                <div><strong>Riwayat Picking Slip</strong></div>
+                <div><span id="rps-userInfo"></span></div>
+              </div>
+
+              <div class="small-note">
+                Cari picking slip yang sudah dibuat, lalu pilih aksi: <strong>Print Ulang</strong> (semua role).
+                <br/>Catatan: Jika ada kebutuhan pembatalan transaksi, gunakan mekanisme Receipt Slip Retur (bukan delete).
+              </div>
+
+              <div class="field-row" style="margin-top:10px;">
+                <div class="field">
+                  <label for="rps-keyword">Nomor / Keyword</label>
+                  <input type="text" id="rps-keyword" placeholder="Contoh: PS-20260108-001 atau nama customer" />
+                </div>
+                <div class="field" style="flex:0 0 180px;">
+                  <label for="rps-date-from">Dari Tanggal</label>
+                  <input type="date" id="rps-date-from" />
+                </div>
+                <div class="field" style="flex:0 0 180px;">
+                  <label for="rps-date-to">Sampai Tanggal</label>
+                  <input type="date" id="rps-date-to" />
+                </div>
+                <div class="field" style="flex:0 0 160px;">
+                  <label>&nbsp;</label>
+                  <button class="btn btn-primary" id="rps-btn-search">Cari</button>
+                </div>
+              </div>
+
+              <div id="rps-status" class="status"></div>
+
+              <table class="rak-table" id="rps-table" style="display:none; margin-top:10px;">
+                <thead>
+                  <tr>
+                    <th>Tanggal</th>
+                    <th>No Picking Slip</th>
+                    <th>Tujuan</th>
+                    <th>Customer</th>
+                    <th>Karung</th>
+                    <th>Ekor</th>
+                    <th>Kg</th>
+                    <th style="width:140px;">Aksi</th>
+                  </tr>
+                </thead>
+                <tbody id="rps-tbody"></tbody>
+              </table>
+
+              <div id="rps-pagination" style="display:none; margin-top:10px; display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                <button type="button" class="btn btn-ghost btn-small" id="rps-btn-prev" disabled>Prev</button>
+                <div class="small-note" style="margin:0;">
+                  <span id="rps-page-info">Page 1</span>
+                  <span id="rps-count-info" style="margin-left:8px;"></span>
+                </div>
+                <button type="button" class="btn btn-ghost btn-small" id="rps-btn-next" disabled>Next</button>
+              </div>
+
+            </div>
+          </div>
+
+<div id="page-laporan-stok" style="display:none;">
             <div class="container">
               <div class="top-bar">
                 <div><strong>Laporan Stok per Item &amp; Pallet</strong></div>
@@ -1831,6 +1896,7 @@
   const pageFormGabungKarung  = document.getElementById('page-form-gabung-karung');
   const pageFormRevisiKarung  = document.getElementById('page-form-revisi-karung');
   const pageFormPickingSlip   = document.getElementById('page-form-picking-slip');
+  const pageRiwayatPickingSlip = document.getElementById('page-riwayat-picking-slip');
   const pageLaporanBatch      = document.getElementById('page-laporan-batch');
   const pageLaporanStok       = document.getElementById('page-laporan-stok');
   const pageLaporanMutasi     = document.getElementById('page-laporan-mutasi');
@@ -1849,6 +1915,277 @@
   let cekKarungInitialized = false;
   let gabungKarungInitialized = false;
   let pickingSlipInitialized = false;
+let riwayatPickingSlipInitialized = false;
+
+// ===== Riwayat Picking Slip (Print Ulang saja) — Global Safe Implementation =====
+// Catatan: implementasi ini sengaja berdiri sendiri agar tidak bergantung pada block-scope lain.
+// Aksi: cari header picking_slip + hitung total dari picking_slip_detail, lalu Print Ulang via openPickingSlipWindow().
+
+async function initRiwayatPickingSlipOnce() {
+  if (riwayatPickingSlipInitialized) return;
+  riwayatPickingSlipInitialized = true;
+
+  const rpsUserInfoEl = document.getElementById('rps-userInfo');
+  const rpsKeywordEl  = document.getElementById('rps-keyword');
+  const rpsDateFromEl = document.getElementById('rps-date-from');
+  const rpsDateToEl   = document.getElementById('rps-date-to');
+  const rpsBtnSearch  = document.getElementById('rps-btn-search');
+  const rpsStatusEl   = document.getElementById('rps-status');
+  const rpsTableEl    = document.getElementById('rps-table');
+  const rpsTbodyEl    = document.getElementById('rps-tbody');
+
+  const setStatus = (msg, type) => {
+    if (!rpsStatusEl) return;
+    rpsStatusEl.textContent = msg || '';
+    rpsStatusEl.className = 'status' + (type ? (' ' + type) : '');
+  };
+
+  const toISODateLocal = (d) => {
+    const tz = d.getTimezoneOffset() * 60000;
+    return new Date(d.getTime() - tz).toISOString().slice(0,10);
+  };
+
+  // tampilkan user info
+  if (rpsUserInfoEl && operatorDisplayName) {
+    const r = currentProfile && currentProfile.role ? currentProfile.role : 'operator';
+    rpsUserInfoEl.textContent = operatorDisplayName + (r ? ` (${r})` : '');
+  }
+
+  // default tanggal: 7 hari terakhir
+  const now = new Date();
+  if (rpsDateToEl && !rpsDateToEl.value) rpsDateToEl.value = toISODateLocal(now);
+  if (rpsDateFromEl && !rpsDateFromEl.value) {
+    const d = new Date(now.getTime() - 6*24*60*60*1000);
+    rpsDateFromEl.value = toISODateLocal(d);
+  }
+
+  const fetchTotalsBySlipIds = async (ids) => {
+    if (!ids || ids.length === 0) return {};
+    // Ambil detail untuk slip yang tampil (maks 50)
+    const { data, error } = await sb
+      .from('picking_slip_detail')
+      .select('picking_slip_id, karung_id, qty_ekor_keluar, qty_kg_keluar')
+      .in('picking_slip_id', ids);
+    if (error) throw error;
+
+    const map = {};
+    (data || []).forEach(r => {
+      const id = r.picking_slip_id;
+      if (!map[id]) map[id] = { karung: 0, ekor: 0, kg: 0 };
+      map[id].karung += 1;
+      map[id].ekor += Number(r.qty_ekor_keluar || 0);
+      map[id].kg   += Number(r.qty_kg_keluar || 0);
+    });
+    return map;
+  };
+
+  const fetchItemNameMap = async (itemIds) => {
+    const uniq = Array.from(new Set((itemIds || []).filter(Boolean)));
+    if (uniq.length === 0) return {};
+    const { data, error } = await sb
+      .from('items')
+      .select('item_id, item_name')
+      .in('item_id', uniq);
+    if (error) throw error;
+    const m = {};
+    (data || []).forEach(x => { m[x.item_id] = x.item_name; });
+    return m;
+  };
+
+  const printSlipById = async (slipId) => {
+    setStatus('Memuat data picking slip...', '');
+    const { data: hdr, error: e1 } = await sb
+      .from('picking_slip')
+      .select('*')
+      .eq('id', slipId)
+      .single();
+    if (e1) { console.error(e1); setStatus('Gagal memuat header: ' + (e1.message || ''), 'error'); return; }
+
+    const { data: det, error: e2 } = await sb
+      .from('picking_slip_detail')
+      .select('*')
+      .eq('picking_slip_id', slipId);
+    if (e2) { console.error(e2); setStatus('Gagal memuat detail: ' + (e2.message || ''), 'error'); return; }
+
+    // Lengkapi item_name untuk template print (jika belum ada)
+    const itemIds = (det || []).map(x => x.item_id);
+    let itemNameMap = {};
+    try { itemNameMap = await fetchItemNameMap(itemIds); } catch (e) { console.warn('item name map failed', e); }
+
+    const detail = (det || []).map(x => ({
+      ...x,
+      item_name: x.item_name || itemNameMap[x.item_id] || x.item_id || 'UNKNOWN'
+    }));
+
+    setStatus('Membuka jendela print...', 'success');
+    try {
+      openPickingSlipWindow(hdr.no_picking_slip || '(tanpa nomor)', hdr, detail);
+    } catch (e) {
+      console.error(e);
+      setStatus('Gagal membuka jendela print: ' + (e.message || ''), 'error');
+    }
+  };
+
+  const renderRows = (rows, totalsMap) => {
+    if (!rpsTbodyEl || !rpsTableEl) return;
+    rpsTbodyEl.innerHTML = '';
+
+    (rows || []).forEach(r => {
+      const t = totalsMap && totalsMap[r.id] ? totalsMap[r.id] : { karung: 0, ekor: 0, kg: 0 };
+
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${escapeHtml(r.tgl_picking || '')}</td>
+        <td><strong>${escapeHtml(r.no_picking_slip || '')}</strong></td>
+        <td>${escapeHtml(r.tujuan || '')}</td>
+        <td>${escapeHtml(r.nama_customer || '')}</td>
+        <td style="text-align:right;">${Number(t.karung || 0)}</td>
+        <td style="text-align:right;">${Number(t.ekor || 0)}</td>
+        <td style="text-align:right;">${Number(t.kg || 0).toFixed(2)}</td>
+        <td>
+          <button class="btn btn-primary btn-small" data-action="print">Print Ulang</button>
+        </td>
+      `;
+
+      const btn = tr.querySelector('button[data-action="print"]');
+      if (btn) {
+        btn.addEventListener('click', () => printSlipById(r.id));
+      }
+
+      rpsTbodyEl.appendChild(tr);
+    });
+
+    rpsTableEl.style.display = (rows && rows.length) ? 'table' : 'none';
+  };
+
+  
+  // Pagination (default: 50 per page). Data tidak dimuat sebelum klik "Cari".
+  const PAGE_SIZE = 50;
+  let currentPage = 1;
+  let lastCount = 0;
+  let hasSearched = false;
+  let lastFilters = null;
+
+  const rpsPaginationEl = document.getElementById('rps-pagination');
+  const rpsBtnPrev = document.getElementById('rps-btn-prev');
+  const rpsBtnNext = document.getElementById('rps-btn-next');
+  const rpsPageInfo = document.getElementById('rps-page-info');
+  const rpsCountInfo = document.getElementById('rps-count-info');
+
+  const getFilters = () => {
+    const keyword = (rpsKeywordEl && rpsKeywordEl.value) ? rpsKeywordEl.value.trim() : '';
+    const dateFrom = (rpsDateFromEl && rpsDateFromEl.value) ? rpsDateFromEl.value : '';
+    const dateTo   = (rpsDateToEl && rpsDateToEl.value) ? rpsDateToEl.value : '';
+    return { keyword, dateFrom, dateTo };
+  };
+
+  const updatePagerUI = () => {
+    if (!rpsPaginationEl) return;
+
+    if (!hasSearched) {
+      rpsPaginationEl.style.display = 'none';
+      return;
+    }
+
+    rpsPaginationEl.style.display = 'flex';
+
+    const totalPages = lastCount ? Math.max(1, Math.ceil(lastCount / PAGE_SIZE)) : 1;
+    if (rpsPageInfo) rpsPageInfo.textContent = `Page ${currentPage} / ${totalPages}`;
+    if (rpsCountInfo) rpsCountInfo.textContent = lastCount ? `Total: ${lastCount}` : '';
+
+    if (rpsBtnPrev) rpsBtnPrev.disabled = (currentPage <= 1);
+    if (rpsBtnNext) rpsBtnNext.disabled = (currentPage >= totalPages);
+  };
+
+  const loadPage = async () => {
+    if (!hasSearched) return;
+
+    const filters = lastFilters || getFilters();
+    const from = (currentPage - 1) * PAGE_SIZE;
+    const to = from + PAGE_SIZE - 1;
+
+    try {
+      setStatus('Mengambil data...', 'info');
+      if (rpsTableEl) rpsTableEl.style.display = 'none';
+      if (rpsTbodyEl) rpsTbodyEl.innerHTML = '';
+
+      let q = sb
+        .from('picking_slip')
+        .select('id, no_picking_slip, tgl_picking, tujuan, nama_customer, no_so, status, created_at', { count: 'exact' })
+        .order('tgl_picking', { ascending: false })
+        .order('created_at', { ascending: false })
+        .range(from, to);
+
+      if (filters.dateFrom) q = q.gte('tgl_picking', filters.dateFrom);
+      if (filters.dateTo)   q = q.lte('tgl_picking', filters.dateTo);
+
+      // Keyword search hanya pada kolom text (hindari ILIKE pada enum tujuan).
+      if (filters.keyword) {
+        const kw = filters.keyword.replace(/%/g, '\\%').replace(/_/g, '\\_');
+        q = q.or(`no_picking_slip.ilike.%${kw}%,nama_customer.ilike.%${kw}%,no_so.ilike.%${kw}%`);
+      }
+
+      const { data, error, count } = await q;
+      if (error) throw error;
+
+      const rows = data || [];
+      lastCount = (typeof count === 'number') ? count : (rows.length ? rows.length : 0);
+
+      if (rows.length === 0) {
+        if (rpsTableEl) rpsTableEl.style.display = 'none';
+        setStatus('Tidak ada data.', 'warning');
+        updatePagerUI();
+        return;
+      }
+
+      try {
+        const totalsMap = await fetchTotalsBySlipIds(rows.map(r => r.id));
+        setStatus(`Menampilkan ${rows.length} data.`, 'success');
+        renderRows(rows, totalsMap);
+      } catch (e) {
+        console.error(e);
+        setStatus('Data header ditemukan, tapi gagal hitung total detail: ' + (e.message || ''), 'error');
+        renderRows(rows, {});
+      }
+
+      updatePagerUI();
+    } catch (e) {
+      console.error(e);
+      setStatus('Gagal mencari: ' + (e.message || ''), 'error');
+      lastCount = 0;
+      updatePagerUI();
+    }
+  };
+
+  const search = async () => {
+    hasSearched = true;
+    currentPage = 1;
+    lastFilters = getFilters();
+    await loadPage();
+  };
+
+  if (rpsBtnSearch) rpsBtnSearch.addEventListener('click', () => { search(); });
+  if (rpsKeywordEl) rpsKeywordEl.addEventListener('keydown', (e) => { if (e.key === 'Enter') search(); });
+
+  if (rpsBtnPrev) rpsBtnPrev.addEventListener('click', async () => {
+    if (!hasSearched) return;
+    if (currentPage <= 1) return;
+    currentPage -= 1;
+    await loadPage();
+  });
+
+  if (rpsBtnNext) rpsBtnNext.addEventListener('click', async () => {
+    if (!hasSearched) return;
+    const totalPages = lastCount ? Math.max(1, Math.ceil(lastCount / PAGE_SIZE)) : 1;
+    if (currentPage >= totalPages) return;
+    currentPage += 1;
+    await loadPage();
+  });
+
+  // Pastikan awalnya tidak memuat data
+  updatePagerUI();
+
+}
   let laporanStokInitialized = false;
   let laporanBatchInitialized  = false;
   let laporanMutasiInitialized = false;
@@ -1992,6 +2329,9 @@
       if (page === 'form-picking-slip') {
       await initPickingSlipOnce();
       }
+      if (page === 'riwayat-picking-slip') {
+        await initRiwayatPickingSlipOnce();
+      }
       if (page === 'laporan-stok') {
         await initLaporanStokOnce();
       }
@@ -2031,6 +2371,7 @@
     setPageVisible(pageFormGabungKarung, (page === 'form-gabung-karung'));
     setPageVisible(pageFormTambahBatch,  (page === 'form-tambah-batch'));
     setPageVisible(pageFormPickingSlip,  (page === 'form-picking-slip'));
+    setPageVisible(pageRiwayatPickingSlip,(page === 'riwayat-picking-slip'));
     setPageVisible(pageLaporanBatch,     (page === 'laporan-batch'));
     setPageVisible(pageLaporanStok,      (page === 'laporan-stok'));
     setPageVisible(pageLaporanMutasi,    (page === 'laporan-mutasi'));
@@ -4688,7 +5029,238 @@ try {
         psDetails = [];
         psRenderDetailTable();
         psStatusMessage.textContent = '';
-        psStatusMessage.className = 'status';
+        psStatusMessag
+
+  // ============== RIWAYAT PICKING SLIP (CARI / PRINT ULANG / DELETE) ==============
+  const rpsUserInfoEl  = document.getElementById('rps-userInfo');
+  const rpsKeywordEl   = document.getElementById('rps-keyword');
+  const rpsDateFromEl  = document.getElementById('rps-date-from');
+  const rpsDateToEl    = document.getElementById('rps-date-to');
+  const rpsBtnSearch   = document.getElementById('rps-btn-search');
+  const rpsStatusEl    = document.getElementById('rps-status');
+  const rpsTableEl     = document.getElementById('rps-table');
+  const rpsTbodyEl     = document.getElementById('rps-tbody');
+
+  function rpsSetStatus(msg, kind = '') {
+    if (!rpsStatusEl) return;
+    rpsStatusEl.textContent = msg || '';
+    rpsStatusEl.className = 'status' + (kind ? ` ${kind}` : '');
+  }
+
+  function rpsFmtDate(d) {
+    if (!d) return '-';
+    const dt = new Date(d);
+    if (isNaN(dt.getTime())) return String(d);
+    return dt.toLocaleDateString('id-ID');
+  }
+
+  async function rpsFetchTotalsBySlipIds(ids) {
+    // return map: id -> {karung, ekor, kg}
+    const totals = {};
+    ids.forEach(id => { totals[id] = { karung: 0, ekor: 0, kg: 0 }; });
+
+    const { data, error } = await sb
+      .from('picking_slip_detail')
+      .select('picking_slip_id, qty_ekor_keluar, qty_kg_keluar')
+      .in('picking_slip_id', ids);
+
+    if (error) throw error;
+
+    (data || []).forEach(r => {
+      const pid = r.picking_slip_id;
+      if (!totals[pid]) totals[pid] = { karung: 0, ekor: 0, kg: 0 };
+      totals[pid].karung += 1;
+      totals[pid].ekor   += Number(r.qty_ekor_keluar || 0);
+      totals[pid].kg     += Number(r.qty_kg_keluar || 0);
+    });
+
+    return totals;
+  }
+
+  async function rpsLoadAndPrint(pickingSlipId) {
+    rpsSetStatus('Mengambil data picking slip...', '');
+    // 1) header
+    const { data: hdr, error: hdrErr } = await sb
+      .from('picking_slip')
+      .select('id, no_picking_slip, tgl_picking, tujuan, nama_customer, no_so, gudang_tujuan, catatan')
+      .eq('id', pickingSlipId)
+      .maybeSingle();
+
+    if (hdrErr) {
+      console.error(hdrErr);
+      rpsSetStatus('Gagal memuat header: ' + (hdrErr.message || ''), 'error');
+      return;
+    }
+    if (!hdr) {
+      rpsSetStatus('Picking slip tidak ditemukan.', 'error');
+      return;
+    }
+
+    // 2) detail
+    const { data: det, error: detErr } = await sb
+      .from('picking_slip_detail')
+      .select('karung_id, item_id, qty_ekor_keluar, qty_kg_keluar')
+      .eq('picking_slip_id', pickingSlipId)
+      .order('karung_id', { ascending: true });
+
+    if (detErr) {
+      console.error(detErr);
+      rpsSetStatus('Gagal memuat detail: ' + (detErr.message || ''), 'error');
+      return;
+    }
+
+    const itemIds = Array.from(new Set((det || []).map(r => r.item_id).filter(Boolean)));
+    const itemNameMap = {};
+    if (itemIds.length) {
+      const { data: it, error: itErr } = await sb
+        .from('items')
+        .select('item_id, item_name')
+        .in('item_id', itemIds);
+
+      if (itErr) {
+        console.warn('Gagal mengambil nama item, lanjut tanpa item_name:', itErr);
+      } else {
+        (it || []).forEach(row => { itemNameMap[row.item_id] = row.item_name || row.item_id; });
+      }
+    }
+
+    const detail = (det || []).map(r => ({
+      karung_id: r.karung_id,
+      item_id: r.item_id,
+      item_name: itemNameMap[r.item_id] || r.item_id,
+      qty_ekor_keluar: Number(r.qty_ekor_keluar || 0),
+      qty_kg_keluar: Number(r.qty_kg_keluar || 0)
+    }));
+
+    const header = {
+      tgl_picking: hdr.tgl_picking || null,
+      tujuan: hdr.tujuan || '',
+      nama_customer: hdr.nama_customer || null,
+      no_so: hdr.no_so || null,
+      gudang_tujuan: hdr.gudang_tujuan || null,
+      catatan: hdr.catatan || null
+    };
+
+    rpsSetStatus('');
+    openPickingSlipWindow(hdr.no_picking_slip || '(tanpa nomor)', header, detail);
+  }
+
+  function rpsRenderRows(rows, totalsMap) {
+    if (!rpsTbodyEl || !rpsTableEl) return;
+    rpsTbodyEl.innerHTML = '';
+
+    (rows || []).forEach(r => {
+      const t = totalsMap && totalsMap[r.id] ? totalsMap[r.id] : { karung: 0, ekor: 0, kg: 0 };
+
+      const tr = document.createElement('tr');
+
+      const tdTgl = document.createElement('td');
+      tdTgl.textContent = rpsFmtDate(r.tgl_picking);
+      tr.appendChild(tdTgl);
+
+      const tdNo = document.createElement('td');
+      tdNo.textContent = r.no_picking_slip || '';
+      tr.appendChild(tdNo);
+
+      const tdTujuan = document.createElement('td');
+      tdTujuan.textContent = r.tujuan || '';
+      tr.appendChild(tdTujuan);
+
+      const tdCust = document.createElement('td');
+      tdCust.textContent = r.nama_customer || '';
+      tr.appendChild(tdCust);
+
+      const tdKarung = document.createElement('td');
+      tdKarung.textContent = String(t.karung || 0);
+      tr.appendChild(tdKarung);
+
+      const tdEkor = document.createElement('td');
+      tdEkor.textContent = String(t.ekor || 0);
+      tr.appendChild(tdEkor);
+
+      const tdKg = document.createElement('td');
+      tdKg.textContent = Number(t.kg || 0).toFixed(2);
+      tr.appendChild(tdKg);
+
+      const tdAksi = document.createElement('td');
+
+      const btnPrint = document.createElement('button');
+      btnPrint.type = 'button';
+      btnPrint.className = 'btn btn-secondary btn-small';
+      btnPrint.textContent = 'Print Ulang';
+      btnPrint.addEventListener('click', async () => {
+        try {
+          await rpsLoadAndPrint(r.id);
+        } catch (e) {
+          console.error(e);
+          rpsSetStatus('Gagal print ulang: ' + (e.message || ''), 'error');
+        }
+      });
+      tdAksi.appendChild(btnPrint);
+
+      tr.appendChild(tdAksi);
+
+      rpsTbodyEl.appendChild(tr);
+    });
+
+    rpsTableEl.style.display = (rows && rows.length) ? 'table' : 'none';
+  }
+
+  async function rpsSearch() {
+    if (!rpsKeywordEl || !rpsDateFromEl || !rpsDateToEl) return;
+
+    const kw = (rpsKeywordEl.value || '').trim();
+    const dFrom = rpsDateFromEl.value || '';
+    const dTo = rpsDateToEl.value || '';
+
+    rpsSetStatus('Mencari picking slip...', '');
+    if (rpsTableEl) rpsTableEl.style.display = 'none';
+    if (rpsTbodyEl) rpsTbodyEl.innerHTML = '';
+
+    let q = sb
+      .from('picking_slip')
+      .select('id, no_picking_slip, tgl_picking, tujuan, nama_customer')
+      .order('tgl_picking', { ascending: false })
+      .limit(50);
+
+    if (kw) {
+      // cari di nomor & nama_customer
+      const safe = kw.replace(/,/g, ' ');
+      q = q.or(`no_picking_slip.ilike.%${safe}%,nama_customer.ilike.%${safe}%`);
+    }
+    if (dFrom) q = q.gte('tgl_picking', dFrom);
+    if (dTo) q = q.lte('tgl_picking', dTo);
+
+    const { data: rows, error } = await q;
+    if (error) {
+      console.error(error);
+      rpsSetStatus('Gagal mencari: ' + (error.message || ''), 'error');
+      return;
+    }
+
+    if (!rows || rows.length === 0) {
+      rpsSetStatus('Tidak ada data.', '');
+      rpsRenderRows([], {});
+      return;
+    }
+
+    const ids = rows.map(r => r.id);
+    try {
+      const totalsMap = await rpsFetchTotalsBySlipIds(ids);
+      rpsSetStatus(`Menampilkan ${rows.length} data (maks 50).`, 'success');
+      rpsRenderRows(rows, totalsMap);
+    } catch (e) {
+      console.error(e);
+      rpsSetStatus('Data header ditemukan, tapi gagal hitung total detail: ' + (e.message || ''), 'error');
+      rpsRenderRows(rows, {});
+    }
+  }
+
+  
+
+
+
+e.className = 'status';
       });
     }
   }
@@ -4934,15 +5506,6 @@ function psBeep(kind) {
       tr.appendChild(tdSisa);
 
       const tdAksi = document.createElement('td');
-      const btnDel = document.createElement('button');
-      btnDel.type = 'button';
-      btnDel.textContent = 'Hapus';
-      btnDel.className = 'btn-small btn-ghost';
-      btnDel.addEventListener('click', () => {
-        psDetails.splice(index, 1);
-        psRenderDetailTable();
-      });
-      tdAksi.appendChild(btnDel);
       tr.appendChild(tdAksi);
 
       psDetailTbody.appendChild(tr);
