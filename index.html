@@ -5585,6 +5585,20 @@ function psBeep(kind) {
       tr.appendChild(tdSisa);
 
       const tdAksi = document.createElement('td');
+
+      const btnHapus = document.createElement('button');
+      btnHapus.type = 'button';
+      btnHapus.textContent = 'Hapus';
+      btnHapus.className = 'btn btn-ghost btn-small';
+      btnHapus.addEventListener('click', () => {
+        const kid = row.karung_id || '';
+        if (!confirm(`Hapus karung ${kid} dari daftar?`)) return;
+        psDetails.splice(index, 1);
+        psRenderDetailTable();
+        if (psKarungSearchInput) psKarungSearchInput.focus();
+      });
+
+      tdAksi.appendChild(btnHapus);
       tr.appendChild(tdAksi);
 
       psDetailTbody.appendChild(tr);
