@@ -461,6 +461,7 @@
         <div class="menu-title" style="margin-top:10px;">Menu Laporan</div>
         <button class="menu-btn" data-page="form-cek-karung">Cek Info Karung</button>
         <button class="menu-btn" data-page="laporan-stok">Laporan Stok Karung</button>
+        <button class="menu-btn" data-page="laporan-pallet">Laporan Pallet</button>
         <button class="menu-btn" data-page="laporan-stok-semua">Laporan Stok Semua Barang</button>
 	      <button class="menu-btn" data-page="laporan-batch">Laporan Batch Pembekuan</button>
         <button class="menu-btn" data-page="laporan-mutasi">Laporan Mutasi / Log Karung</button>
@@ -1651,6 +1652,55 @@
             </div>
           </div>
 
+
+<div id="page-laporan-pallet" style="display:none;">
+  <div class="container">
+    <div class="top-bar">
+      <div><strong>Laporan Pallet</strong></div>
+      <div><span id="lp-userInfo"></span></div>
+    </div>
+
+    <div class="section-title">1. Pilih Pallet</div>
+    <div class="field-row">
+      <div class="field">
+        <label for="lp-palletSelect">Pallet</label>
+        <select id="lp-palletSelect">
+          <option value="">-- Pilih pallet --</option>
+        </select>
+        <div class="small-note">
+          Laporan menampilkan karung dengan status <code>tersedia</code> / <code>terbuka</code> dan sisa stok (ekor/kg) &gt; 0.
+        </div>
+      </div>
+      <div class="field" style="flex:0 0 170px;">
+        <label>&nbsp;</label>
+        <button type="button" class="btn btn-primary btn-small" id="lp-btn-tampilkan">
+          Tampilkan
+        </button>
+      </div>
+    </div>
+
+    <div class="section-title">2. Hasil</div>
+    <div id="lp-status" class="status"></div>
+
+    <div id="lp-summary" class="totals-box" style="display:none; margin-top:8px;"></div>
+
+    <table class="rak-table" id="lp-table" style="display:none; margin-top:8px;">
+      <thead>
+        <tr>
+          <th>No</th>
+          <th>Karung ID</th>
+          <th>Barang</th>
+          <th>Tgl Produksi</th>
+          <th>Ekor</th>
+          <th>Kg</th>
+        </tr>
+      </thead>
+      <tbody id="lp-tbody"></tbody>
+    </table>
+  </div>
+</div>
+
+
 <div id="page-laporan-stok-semua" style="display:none;">
   <div class="container">
     <div class="top-bar">
@@ -1972,6 +2022,7 @@
   const pageRiwayatPickingSlip = document.getElementById('page-riwayat-picking-slip');
   const pageLaporanBatch      = document.getElementById('page-laporan-batch');
   const pageLaporanStok       = document.getElementById('page-laporan-stok');
+  const pageLaporanPallet    = document.getElementById('page-laporan-pallet');
   const pageLaporanStokSemua  = document.getElementById('page-laporan-stok-semua');
   const pageLaporanMutasi     = document.getElementById('page-laporan-mutasi');
   const pageFormTambahBatch = document.getElementById('page-form-tambah-batch');
@@ -2261,6 +2312,7 @@ async function initRiwayatPickingSlipOnce() {
 
 }
   let laporanStokInitialized = false;
+  let laporanPalletInitialized = false;
   let laporanStokSemuaInitialized = false;
   let laporanBatchInitialized  = false;
   let laporanMutasiInitialized = false;
@@ -2410,6 +2462,9 @@ async function initRiwayatPickingSlipOnce() {
       if (page === 'laporan-stok') {
         await initLaporanStokOnce();
       }
+      if (page === 'laporan-pallet') {
+        await initLaporanPalletOnce();
+      }
       if (page === 'laporan-stok-semua') {
         await initLaporanStokSemuaOnce();
       }
@@ -2452,6 +2507,7 @@ async function initRiwayatPickingSlipOnce() {
     setPageVisible(pageRiwayatPickingSlip,(page === 'riwayat-picking-slip'));
     setPageVisible(pageLaporanBatch,     (page === 'laporan-batch'));
     setPageVisible(pageLaporanStok,      (page === 'laporan-stok'));
+    setPageVisible(pageLaporanPallet,    (page === 'laporan-pallet'));
     setPageVisible(pageLaporanStokSemua, (page === 'laporan-stok-semua'));
     setPageVisible(pageLaporanMutasi,    (page === 'laporan-mutasi'));
   }
@@ -5945,7 +6001,177 @@ function showDetailKarungForPallet(pallet, rows) {
   lsDetailContainer.style.display = 'block';
 }
 
-  // ============== LAPORAN STOK SEMUA BARANG (RPC) ==============
+  
+  // ============== LAPORAN PALLET (pilih pallet -> detail karung + total) ==============
+  const lpUserInfoEl    = document.getElementById('lp-userInfo');
+  const lpPalletSelect  = document.getElementById('lp-palletSelect');
+  const lpBtnTampilkan  = document.getElementById('lp-btn-tampilkan');
+  const lpStatusEl      = document.getElementById('lp-status');
+  const lpSummaryEl     = document.getElementById('lp-summary');
+  const lpTableEl       = document.getElementById('lp-table');
+  const lpTbodyEl       = document.getElementById('lp-tbody');
+
+  async function lpEnsureItemsLoaded() {
+    if (Array.isArray(items) && items.length > 0) return true;
+    const { data: itemData, error: itemError } = await sb
+      .from('items')
+      .select('item_id, item_name')
+      .order('item_name', { ascending: true });
+    if (itemError) {
+      console.error(itemError);
+      return false;
+    }
+    items = itemData || [];
+    return true;
+  }
+
+  async function initLaporanPalletOnce() {
+    if (laporanPalletInitialized) return;
+    laporanPalletInitialized = true;
+
+    if (lpUserInfoEl && operatorDisplayName) {
+      const r = currentProfile && currentProfile.role ? currentProfile.role : 'operator';
+      lpUserInfoEl.textContent = operatorDisplayName + (r ? ` (${r})` : '');
+    }
+
+    if (lpStatusEl) {
+      lpStatusEl.textContent = 'Memuat daftar pallet...';
+      lpStatusEl.className = 'status';
+    }
+
+    const { data: palletData, error: palletError } = await sb
+      .from('master_pallet')
+      .select('pallet_id')
+      .order('pallet_id', { ascending: true });
+
+    if (palletError) {
+      console.error(palletError);
+      if (lpStatusEl) {
+        lpStatusEl.textContent = 'Gagal memuat pallet: ' + (palletError.message || '');
+        lpStatusEl.className = 'status error';
+      }
+      return;
+    }
+
+    if (lpPalletSelect) {
+      lpPalletSelect.innerHTML = '<option value="">-- Pilih pallet --</option>';
+      (palletData || []).forEach(p => {
+        const opt = document.createElement('option');
+        opt.value = p.pallet_id;
+        opt.textContent = p.pallet_id;
+        lpPalletSelect.appendChild(opt);
+      });
+    }
+
+    if (lpBtnTampilkan) {
+      lpBtnTampilkan.addEventListener('click', tampilkanLaporanPallet);
+    }
+
+    if (lpStatusEl) {
+      lpStatusEl.textContent = 'Silakan pilih pallet, lalu klik "Tampilkan".';
+      lpStatusEl.className = 'status';
+    }
+  }
+
+  async function tampilkanLaporanPallet() {
+    if (!lpPalletSelect) return;
+
+    const palletId = (lpPalletSelect.value || '').trim();
+
+    if (lpStatusEl) { lpStatusEl.textContent = ''; lpStatusEl.className = 'status'; }
+    if (lpTbodyEl) lpTbodyEl.innerHTML = '';
+    if (lpSummaryEl) lpSummaryEl.style.display = 'none';
+    if (lpTableEl) lpTableEl.style.display = 'none';
+
+    if (!palletId) {
+      if (lpStatusEl) { lpStatusEl.textContent = 'Silakan pilih pallet terlebih dahulu.'; lpStatusEl.className = 'status error'; }
+      return;
+    }
+
+    if (lpStatusEl) { lpStatusEl.textContent = 'Mengambil data stok dari server...'; lpStatusEl.className = 'status'; }
+
+    await lpEnsureItemsLoaded();
+    const itemMap = {};
+    (items || []).forEach(it => { itemMap[it.item_id] = it.item_name; });
+
+    const { data, error } = await sb
+      .from('stok_karung')
+      .select('karung_id, item_id, qty_ekor_sisa, qty_kg_sisa, tgl_produksi, status_karung')
+      .eq('pallet_id', palletId)
+      .in('status_karung', ['tersedia', 'terbuka'])
+      .order('tgl_produksi', { ascending: true })
+      .order('karung_id', { ascending: true });
+
+    if (error) {
+      console.error(error);
+      if (lpStatusEl) { lpStatusEl.textContent = 'Gagal memuat data pallet: ' + (error.message || ''); lpStatusEl.className = 'status error'; }
+      return;
+    }
+
+    const rows = (data || []).filter(r => {
+      const ek = Number(r.qty_ekor_sisa ?? 0);
+      const kg = Number(r.qty_kg_sisa ?? 0);
+      return ek > 0 || kg > 0;
+    });
+
+    if (!rows.length) {
+      if (lpStatusEl) { lpStatusEl.textContent = `Tidak ada karung (tersedia/terbuka) pada pallet "${palletId}".`; lpStatusEl.className = 'status'; }
+      return;
+    }
+
+    let totalEkor = 0;
+    let totalKg = 0;
+
+    rows.forEach((r, i) => {
+      const tr = document.createElement('tr');
+
+      const tdNo = document.createElement('td');
+      tdNo.textContent = String(i + 1);
+      tr.appendChild(tdNo);
+
+      const tdKid = document.createElement('td');
+      tdKid.textContent = r.karung_id || '';
+      tr.appendChild(tdKid);
+
+      const tdItem = document.createElement('td');
+      tdItem.textContent = itemMap[r.item_id] || r.item_id || '';
+      tr.appendChild(tdItem);
+
+      const tdTgl = document.createElement('td');
+      tdTgl.textContent = r.tgl_produksi ? String(r.tgl_produksi) : '-';
+      tr.appendChild(tdTgl);
+
+      const ek = Number(r.qty_ekor_sisa ?? 0);
+      const kg = Number(r.qty_kg_sisa ?? 0);
+      totalEkor += ek;
+      totalKg += kg;
+
+      const tdEk = document.createElement('td');
+      tdEk.textContent = String(ek);
+      tr.appendChild(tdEk);
+
+      const tdKg = document.createElement('td');
+      tdKg.textContent = kg.toFixed(2);
+      tr.appendChild(tdKg);
+
+      lpTbodyEl.appendChild(tr);
+    });
+
+    if (lpSummaryEl) {
+      lpSummaryEl.innerHTML = `
+        Pallet: <strong>${escapeHtml(palletId)}</strong><br/>
+        Jumlah karung: <strong>${rows.length}</strong><br/>
+        Total: <strong>${totalEkor}</strong> ekor / <strong>${totalKg.toFixed(2)}</strong> kg
+      `;
+      lpSummaryEl.style.display = 'block';
+    }
+
+    if (lpTableEl) lpTableEl.style.display = 'table';
+    if (lpStatusEl) { lpStatusEl.textContent = 'Laporan pallet berhasil ditampilkan.'; lpStatusEl.className = 'status success'; }
+  }
+
+
+// ============== LAPORAN STOK SEMUA BARANG (RPC) ==============
 
   const lssUserInfoEl  = document.getElementById('lss-userInfo');
   const lssKeywordEl   = document.getElementById('lss-keyword');
