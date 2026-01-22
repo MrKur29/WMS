@@ -458,6 +458,8 @@
 
         <button class="menu-btn" data-page="riwayat-picking-slip">Riwayat Picking Slip</button>
 
+        <button class="menu-btn" data-page="riwayat-receipt-slip">Riwayat Receipt Slip</button>
+
         <div class="menu-title" style="margin-top:10px;">Menu Laporan</div>
         <button class="menu-btn" data-page="form-cek-karung">Cek Info Karung</button>
         <button class="menu-btn" data-page="laporan-stok">Laporan Stok Karung</button>
@@ -1589,6 +1591,68 @@
             </div>
           </div>
 
+<div id="page-riwayat-receipt-slip" style="display:none;">
+            <div class="container">
+              <div class="top-bar">
+                <div><strong>Riwayat Receipt Slip</strong></div>
+                <div><span id="rrs-userInfo"></span></div>
+              </div>
+
+              <div class="small-note">
+                Cari picking slip yang sudah dibuat, lalu pilih aksi: <strong>Print Ulang</strong> (semua role).
+                <br/>Catatan: Jika ada kebutuhan pembatalan transaksi, gunakan mekanisme Receipt Slip Retur (bukan delete).
+              </div>
+
+              <div class="field-row" style="margin-top:10px;">
+                <div class="field">
+                  <label for="rrs-keyword">Nomor / Keyword</label>
+                  <input type="text" id="rrs-keyword" placeholder="Contoh: RS-20260108-0001 atau keyword" />
+                </div>
+                <div class="field" style="flex:0 0 180px;">
+                  <label for="rrs-date-from">Dari Tanggal</label>
+                  <input type="date" id="rrs-date-from" />
+                </div>
+                <div class="field" style="flex:0 0 180px;">
+                  <label for="rrs-date-to">Sampai Tanggal</label>
+                  <input type="date" id="rrs-date-to" />
+                </div>
+                <div class="field" style="flex:0 0 160px;">
+                  <label>&nbsp;</label>
+                  <button class="btn btn-primary" id="rrs-btn-search">Cari</button>
+                </div>
+              </div>
+
+              <div id="rrs-status" class="status"></div>
+
+              <table class="rak-table" id="rrs-table" style="display:none; margin-top:10px;">
+                <thead>
+                  <tr>
+                    <th>Tanggal</th>
+                    <th>No Receipt</th>
+                    <th>Sumber</th>
+                    <th>Gudang Asal</th>
+                    <th>Keterangan</th>
+                    <th>Karung</th>
+                    <th>Ekor</th>
+                    <th>Kg</th>
+                    <th style="width:140px;">Aksi</th>
+                  </tr>
+                </thead>
+                <tbody id="rrs-tbody"></tbody>
+              </table>
+
+              <div id="rrs-pagination" style="display:none; margin-top:10px; display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                <button type="button" class="btn btn-ghost btn-small" id="rrs-btn-prev" disabled>Prev</button>
+                <div class="small-note" style="margin:0;">
+                  <span id="rrs-page-info">Page 1</span>
+                  <span id="rrs-count-info" style="margin-left:8px;"></span>
+                </div>
+                <button type="button" class="btn btn-ghost btn-small" id="rrs-btn-next" disabled>Next</button>
+              </div>
+
+            </div>
+          </div>
+
 <div id="page-laporan-stok" style="display:none;">
             <div class="container">
               <div class="top-bar">
@@ -2020,6 +2084,7 @@
   const pageFormRevisiKarung  = document.getElementById('page-form-revisi-karung');
   const pageFormPickingSlip   = document.getElementById('page-form-picking-slip');
   const pageRiwayatPickingSlip = document.getElementById('page-riwayat-picking-slip');
+  const pageRiwayatReceiptSlip = document.getElementById('page-riwayat-receipt-slip');
   const pageLaporanBatch      = document.getElementById('page-laporan-batch');
   const pageLaporanStok       = document.getElementById('page-laporan-stok');
   const pageLaporanPallet    = document.getElementById('page-laporan-pallet');
@@ -2041,6 +2106,7 @@
   let gabungKarungInitialized = false;
   let pickingSlipInitialized = false;
 let riwayatPickingSlipInitialized = false;
+let riwayatReceiptSlipInitialized = false;
 
 // ===== Riwayat Picking Slip (Print Ulang saja) — Global Safe Implementation =====
 // Catatan: implementasi ini sengaja berdiri sendiri agar tidak bergantung pada block-scope lain.
@@ -2311,6 +2377,291 @@ async function initRiwayatPickingSlipOnce() {
   updatePagerUI();
 
 }
+
+// ===== Riwayat Receipt Slip (Print Ulang saja) — Global Safe Implementation =====
+// Aksi: cari header barang_masuk_receipt + hitung total dari barang_masuk_receipt_line, lalu Print Ulang via openReceiptSlipWindow().
+
+async function initRiwayatReceiptSlipOnce() {
+  if (riwayatReceiptSlipInitialized) return;
+  riwayatReceiptSlipInitialized = true;
+
+  const rrsUserInfoEl = document.getElementById('rrs-userInfo');
+  const rrsKeywordEl  = document.getElementById('rrs-keyword');
+  const rrsDateFromEl = document.getElementById('rrs-date-from');
+  const rrsDateToEl   = document.getElementById('rrs-date-to');
+  const rrsBtnSearch  = document.getElementById('rrs-btn-search');
+  const rrsStatusEl   = document.getElementById('rrs-status');
+  const rrsTableEl    = document.getElementById('rrs-table');
+  const rrsTbodyEl    = document.getElementById('rrs-tbody');
+
+  const rrsBtnPrev    = document.getElementById('rrs-btn-prev');
+  const rrsBtnNext    = document.getElementById('rrs-btn-next');
+  const rrsPageInfo   = document.getElementById('rrs-page-info');
+  const rrsCountInfo  = document.getElementById('rrs-count-info');
+  const rrsPagerWrap  = document.getElementById('rrs-pagination');
+
+  const setStatus = (msg, type) => {
+    if (!rrsStatusEl) return;
+    rrsStatusEl.textContent = msg || '';
+    rrsStatusEl.className = 'status' + (type ? (' ' + type) : '');
+  };
+
+  const toISODateLocal = (d) => {
+    const tz = d.getTimezoneOffset() * 60000;
+    return new Date(d.getTime() - tz).toISOString().slice(0,10);
+  };
+
+  // tampilkan user info
+  if (rrsUserInfoEl && operatorDisplayName) {
+    const r = currentProfile && currentProfile.role ? currentProfile.role : 'operator';
+    rrsUserInfoEl.textContent = operatorDisplayName + (r ? ` (${r})` : '');
+  }
+
+  // default tanggal: 7 hari terakhir
+  const now = new Date();
+  if (rrsDateToEl && !rrsDateToEl.value) rrsDateToEl.value = toISODateLocal(now);
+  if (rrsDateFromEl && !rrsDateFromEl.value) {
+    const d = new Date(now.getTime() - 6*24*60*60*1000);
+    rrsDateFromEl.value = toISODateLocal(d);
+  }
+
+  const pageSize = 50;
+  let currentPage = 1;
+  let totalCount = 0;
+  let lastQueryKey = '';
+
+  const fetchTotalsByReceiptIds = async (ids) => {
+    if (!ids || ids.length === 0) return {};
+    const { data, error } = await sb
+      .from('barang_masuk_receipt_line')
+      .select('receipt_id, qty_ekor, qty_kg', { count: 'exact' })
+      .in('receipt_id', ids);
+    if (error) throw error;
+
+    const map = {};
+    (data || []).forEach(r => {
+      const rid = r.receipt_id;
+      if (!map[rid]) map[rid] = { karung: 0, ekor: 0, kg: 0 };
+      map[rid].karung += 1;
+      map[rid].ekor += Number(r.qty_ekor || 0);
+      map[rid].kg   += Number(r.qty_kg || 0);
+    });
+    return map;
+  };
+
+  const updatePagerUI = () => {
+    const totalPages = Math.max(1, Math.ceil((totalCount || 0) / pageSize));
+    if (rrsPageInfo) rrsPageInfo.textContent = `Page ${currentPage} / ${totalPages}`;
+    if (rrsCountInfo) rrsCountInfo.textContent = totalCount ? `Total: ${totalCount}` : '';
+    if (rrsBtnPrev) rrsBtnPrev.disabled = (currentPage <= 1);
+    if (rrsBtnNext) rrsBtnNext.disabled = (currentPage >= totalPages);
+    if (rrsPagerWrap) rrsPagerWrap.style.display = totalCount ? 'flex' : 'none';
+  };
+
+  const renderTable = async (rows) => {
+    if (!rrsTbodyEl) return;
+    rrsTbodyEl.innerHTML = '';
+    if (!rows || rows.length === 0) {
+      if (rrsTableEl) rrsTableEl.style.display = 'none';
+      updatePagerUI();
+      return;
+    }
+    if (rrsTableEl) rrsTableEl.style.display = 'table';
+
+    // totals
+    const ids = rows.map(x => x.receipt_id);
+    let totals = {};
+    try { totals = await fetchTotalsByReceiptIds(ids); } catch (e) { console.warn('Totals error', e); }
+
+    rows.forEach(r => {
+      const t = totals[r.receipt_id] || { karung: 0, ekor: 0, kg: 0 };
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${escapeHtml(String(r.tgl_terima || ''))}</td>
+        <td><code>${escapeHtml(String(r.receipt_no || ''))}</code></td>
+        <td>${escapeHtml(String(r.sumber || ''))}</td>
+        <td>${escapeHtml(String(r.gudang_asal || ''))}</td>
+        <td>${escapeHtml(String(r.keterangan || ''))}</td>
+        <td>${escapeHtml(String(t.karung || 0))}</td>
+        <td>${escapeHtml(String(t.ekor || 0))}</td>
+        <td>${escapeHtml(Number(t.kg || 0).toFixed(2))}</td>
+        <td>
+          <button type="button" class="btn btn-ghost btn-small rrs-print" data-receipt-id="${r.receipt_id}">Print Ulang</button>
+        </td>
+      `;
+      rrsTbodyEl.appendChild(tr);
+    });
+
+    // bind print
+    rrsTbodyEl.querySelectorAll('.rrs-print').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const receiptId = btn.dataset.receiptId;
+        if (!receiptId) return;
+        btn.disabled = true;
+        btn.textContent = 'Memuat...';
+        try {
+          const header = await rrsFetchHeaderForPrint(receiptId);
+          const lines = await rrsFetchLinesForPrint(receiptId);
+          openReceiptSlipWindow(header, lines);
+          setStatus('OK. Print window dibuka.', 'success');
+        } catch (e) {
+          console.error(e);
+          setStatus('Gagal print ulang: ' + (e.message || e), 'error');
+        } finally {
+          btn.disabled = false;
+          btn.textContent = 'Print Ulang';
+        }
+      });
+    });
+
+    updatePagerUI();
+  };
+
+  async function rrsFetchHeaderForPrint(receiptId) {
+    const { data, error } = await sb
+      .from('barang_masuk_receipt')
+      .select('receipt_no, tgl_terima, sumber, gudang_asal, keterangan, operator, status, posted_at')
+      .eq('receipt_id', receiptId)
+      .single();
+    if (error) throw error;
+    return data;
+  }
+
+  async function rrsFetchLinesForPrint(receiptId) {
+    const { data: lines, error } = await sb
+      .from('barang_masuk_receipt_line')
+      .select('line_id, karung_id_input, item_id, qty_ekor, qty_kg, tgl_produksi')
+      .eq('receipt_id', receiptId)
+      .order('line_id', { ascending: true });
+    if (error) throw error;
+
+    const itemIds = Array.from(new Set((lines || []).map(x => x.item_id).filter(Boolean)));
+    let itemMap = {};
+    if (itemIds.length) {
+      const { data: items, error: e2 } = await sb
+        .from('items')
+        .select('item_id, item_name')
+        .in('item_id', itemIds);
+      if (!e2) (items || []).forEach(it => itemMap[it.item_id] = it.item_name);
+    }
+
+    return (lines || []).map(l => ({
+      ...l,
+      item_name: itemMap[l.item_id] || l.item_id
+    }));
+  }
+
+  async function runSearch(resetPage=false) {
+    if (resetPage) currentPage = 1;
+
+    const kw = (rrsKeywordEl?.value || '').trim();
+    const df = (rrsDateFromEl?.value || '').trim();
+    const dt = (rrsDateToEl?.value || '').trim();
+    const qk = [kw, df, dt].join('|');
+    if (resetPage) lastQueryKey = qk;
+    if (!resetPage && qk !== lastQueryKey) {
+      currentPage = 1;
+      lastQueryKey = qk;
+    }
+
+    setStatus('Mencari receipt slip...', '');
+    if (rrsTableEl) rrsTableEl.style.display = 'none';
+    if (rrsPagerWrap) rrsPagerWrap.style.display = 'none';
+
+    // count query
+    let qCount = sb
+      .from('barang_masuk_receipt')
+      .select('receipt_id', { count: 'exact', head: true })
+      .eq('status', 'posted');
+
+    if (df) qCount = qCount.gte('tgl_terima', df);
+    if (dt) qCount = qCount.lte('tgl_terima', dt);
+    if (kw) {
+      const esc = kw.replace(/%/g, '\\%').replace(/,/g, '\\,');
+      qCount = qCount.or(`receipt_no.ilike.%${esc}%,keterangan.ilike.%${esc}%,operator.ilike.%${esc}%`);
+    }
+
+    const { count, error: ec } = await qCount;
+    if (ec) {
+      setStatus('Gagal mencari: ' + (ec.message || ec), 'error');
+      return;
+    }
+    totalCount = count || 0;
+    updatePagerUI();
+
+    if (!totalCount) {
+      setStatus('Tidak ada data (status posted) untuk filter ini.', '');
+      await renderTable([]);
+      return;
+    }
+
+    const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+    if (currentPage > totalPages) currentPage = totalPages;
+
+    const offset = (currentPage - 1) * pageSize;
+    const to = offset + pageSize - 1;
+
+    let q = sb
+      .from('barang_masuk_receipt')
+      .select('receipt_id, receipt_no, tgl_terima, sumber, gudang_asal, keterangan, operator, status, posted_at')
+      .eq('status', 'posted')
+      .order('tgl_terima', { ascending: false })
+      .order('receipt_no', { ascending: false })
+      .range(offset, to);
+
+    if (df) q = q.gte('tgl_terima', df);
+    if (dt) q = q.lte('tgl_terima', dt);
+    if (kw) {
+      const esc = kw.replace(/%/g, '\\%').replace(/,/g, '\\,');
+      q = q.or(`receipt_no.ilike.%${esc}%,keterangan.ilike.%${esc}%,operator.ilike.%${esc}%`);
+    }
+
+    const { data, error } = await q;
+    if (error) {
+      setStatus('Gagal mencari: ' + (error.message || error), 'error');
+      return;
+    }
+
+    setStatus(`Menampilkan ${data?.length || 0} data.`, 'success');
+    await renderTable(data || []);
+  }
+
+  // events
+  if (rrsBtnSearch) {
+    rrsBtnSearch.addEventListener('click', async () => {
+      await runSearch(true);
+    });
+  }
+  if (rrsKeywordEl) {
+    rrsKeywordEl.addEventListener('keydown', async (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        await runSearch(true);
+      }
+    });
+  }
+  if (rrsBtnPrev) {
+    rrsBtnPrev.addEventListener('click', async () => {
+      if (currentPage <= 1) return;
+      currentPage -= 1;
+      await runSearch(false);
+    });
+  }
+  if (rrsBtnNext) {
+    rrsBtnNext.addEventListener('click', async () => {
+      const totalPages = Math.max(1, Math.ceil((totalCount || 0) / pageSize));
+      if (currentPage >= totalPages) return;
+      currentPage += 1;
+      await runSearch(false);
+    });
+  }
+
+  // Jangan load data otomatis (konsisten dengan riwayat picking slip)
+  setStatus('Siap. Masukkan filter lalu klik Cari.', '');
+  updatePagerUI();
+}
+
+
   let laporanStokInitialized = false;
   let laporanPalletInitialized = false;
   let laporanStokSemuaInitialized = false;
@@ -2459,6 +2810,9 @@ async function initRiwayatPickingSlipOnce() {
       if (page === 'riwayat-picking-slip') {
         await initRiwayatPickingSlipOnce();
       }
+      if (page === 'riwayat-receipt-slip') {
+        await initRiwayatReceiptSlipOnce();
+      }
       if (page === 'laporan-stok') {
         await initLaporanStokOnce();
       }
@@ -2505,6 +2859,7 @@ async function initRiwayatPickingSlipOnce() {
     setPageVisible(pageFormTambahBatch,  (page === 'form-tambah-batch'));
     setPageVisible(pageFormPickingSlip,  (page === 'form-picking-slip'));
     setPageVisible(pageRiwayatPickingSlip,(page === 'riwayat-picking-slip'));
+    setPageVisible(pageRiwayatReceiptSlip,(page === 'riwayat-receipt-slip'));
     setPageVisible(pageLaporanBatch,     (page === 'laporan-batch'));
     setPageVisible(pageLaporanStok,      (page === 'laporan-stok'));
     setPageVisible(pageLaporanPallet,    (page === 'laporan-pallet'));
