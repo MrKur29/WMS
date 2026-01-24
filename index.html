@@ -345,6 +345,8 @@
     .rak-table th {
       background: #f0f2f7;
     }
+    .row-clickable{cursor:pointer;}
+    .row-clickable:hover{background:#eef2ff;}
     .totals-box {
       background: #f9fafc;
       border-radius: 4px;
@@ -464,6 +466,7 @@
         <button class="menu-btn" data-page="form-cek-karung">Cek Info Karung</button>
         <button class="menu-btn" data-page="laporan-stok">Laporan Stok Karung</button>
         <button class="menu-btn" data-page="laporan-pallet">Laporan Pallet</button>
+        <button class="menu-btn" data-page="laporan-opname-pallet">Stock Opname Pallet</button>
         <button class="menu-btn" data-page="laporan-stok-semua">Laporan Stok Semua Barang</button>
 	      <button class="menu-btn" data-page="laporan-batch">Laporan Batch Pembekuan</button>
         <button class="menu-btn" data-page="laporan-mutasi">Laporan Mutasi / Log Karung</button>
@@ -1765,6 +1768,63 @@
 </div>
 
 
+
+<div id="page-laporan-opname-pallet" style="display:none;">
+  <div class="container">
+    <div class="top-bar">
+      <div><strong>Stock Opname Pallet (Rekapan Semua Pallet)</strong></div>
+      <div><span id="lop-userInfo"></span></div>
+    </div>
+
+    <div class="small-note">
+      Rekapan dihitung dari <code>stok_karung</code> dengan status <code>tersedia</code> / <code>terbuka</code> dan sisa stok (ekor/kg) &gt; 0.
+      Klik salah satu pallet untuk melihat detail karung di pallet tersebut.
+    </div>
+
+    <div class="section-title">1. Rekapan Semua Pallet</div>
+    <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+      <button type="button" class="btn btn-primary btn-small" id="lop-btn-refresh">Refresh</button>
+      <div class="small-note" style="margin:0;">Gunakan saat selesai stock opname / ada perpindahan karung.</div>
+    </div>
+
+    <div id="lop-status" class="status" style="margin-top:8px;"></div>
+
+    <table class="rak-table" id="lop-table" style="display:none; margin-top:8px;">
+      <thead>
+        <tr>
+          <th>Pallet</th>
+          <th>Jumlah Goni</th>
+          <th>Total Ekor</th>
+          <th>Total Kg</th>
+        </tr>
+      </thead>
+      <tbody id="lop-tbody"></tbody>
+    </table>
+
+    <div id="lop-detail-container" style="display:none; margin-top:14px;">
+      <div class="section-title" style="margin-top:0;">2. Detail Karung dalam Pallet</div>
+      <p style="font-size:13px; margin-bottom:4px;">
+        Pallet: <strong><span id="lop-detail-pallet"></span></strong>
+      </p>
+
+      <table class="rak-table" id="lop-detail-table">
+        <thead>
+          <tr>
+            <th>No</th>
+            <th>Karung ID</th>
+            <th>Barang</th>
+            <th>Tgl Produksi</th>
+            <th>Ekor</th>
+            <th>Kg</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody id="lop-detail-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
 <div id="page-laporan-stok-semua" style="display:none;">
   <div class="container">
     <div class="top-bar">
@@ -2088,6 +2148,7 @@
   const pageLaporanBatch      = document.getElementById('page-laporan-batch');
   const pageLaporanStok       = document.getElementById('page-laporan-stok');
   const pageLaporanPallet    = document.getElementById('page-laporan-pallet');
+  const pageLaporanOpnamePallet = document.getElementById('page-laporan-opname-pallet');
   const pageLaporanStokSemua  = document.getElementById('page-laporan-stok-semua');
   const pageLaporanMutasi     = document.getElementById('page-laporan-mutasi');
   const pageFormTambahBatch = document.getElementById('page-form-tambah-batch');
@@ -2819,6 +2880,9 @@ async function initRiwayatReceiptSlipOnce() {
       if (page === 'laporan-pallet') {
         await initLaporanPalletOnce();
       }
+      if (page === 'laporan-opname-pallet') {
+        await initLaporanOpnamePalletOnce();
+      }
       if (page === 'laporan-stok-semua') {
         await initLaporanStokSemuaOnce();
       }
@@ -2863,6 +2927,7 @@ async function initRiwayatReceiptSlipOnce() {
     setPageVisible(pageLaporanBatch,     (page === 'laporan-batch'));
     setPageVisible(pageLaporanStok,      (page === 'laporan-stok'));
     setPageVisible(pageLaporanPallet,    (page === 'laporan-pallet'));
+    setPageVisible(pageLaporanOpnamePallet,(page === 'laporan-opname-pallet'));
     setPageVisible(pageLaporanStokSemua, (page === 'laporan-stok-semua'));
     setPageVisible(pageLaporanMutasi,    (page === 'laporan-mutasi'));
   }
@@ -6523,6 +6588,201 @@ function showDetailKarungForPallet(pallet, rows) {
 
     if (lpTableEl) lpTableEl.style.display = 'table';
     if (lpStatusEl) { lpStatusEl.textContent = 'Laporan pallet berhasil ditampilkan.'; lpStatusEl.className = 'status success'; }
+  }
+
+
+
+  // ============== LAPORAN STOCK OPNAME PALLET (REKAP SEMUA PALLET + DETAIL) ==============
+
+  const lopUserInfoEl     = document.getElementById('lop-userInfo');
+  const lopBtnRefresh     = document.getElementById('lop-btn-refresh');
+  const lopStatusEl       = document.getElementById('lop-status');
+  const lopTable          = document.getElementById('lop-table');
+  const lopTbody          = document.getElementById('lop-tbody');
+
+  const lopDetailContainer = document.getElementById('lop-detail-container');
+  const lopDetailPallet    = document.getElementById('lop-detail-pallet');
+  const lopDetailTbody     = document.getElementById('lop-detail-tbody');
+
+  let laporanOpnamePalletInitialized = false;
+  let lopLastRows = [];          // raw stok_karung rows (filtered)
+  let lopByPallet = {};          // map pallet_id -> summary
+  let lopItemsMap = {};          // item_id -> item_name
+
+  function lopResetUI() {
+    if (lopStatusEl) { lopStatusEl.textContent = ''; lopStatusEl.className = 'status'; }
+    if (lopTable) lopTable.style.display = 'none';
+    if (lopTbody) lopTbody.innerHTML = '';
+    if (lopDetailContainer) lopDetailContainer.style.display = 'none';
+    if (lopDetailPallet) lopDetailPallet.textContent = '';
+    if (lopDetailTbody) lopDetailTbody.innerHTML = '';
+  }
+
+  function lopSetStatus(msg, kind) {
+    if (!lopStatusEl) return;
+    lopStatusEl.textContent = msg || '';
+    lopStatusEl.className = 'status' + (kind ? (' ' + kind) : '');
+  }
+
+  async function initLaporanOpnamePalletOnce() {
+    if (laporanOpnamePalletInitialized) return;
+    laporanOpnamePalletInitialized = true;
+
+    if (lopUserInfoEl && operatorDisplayName) {
+      const r = currentProfile && currentProfile.role ? currentProfile.role : 'operator';
+      lopUserInfoEl.textContent = operatorDisplayName + (r ? ` (${r})` : '');
+    }
+
+    if (lopBtnRefresh) {
+      lopBtnRefresh.addEventListener('click', () => lopLoadRekapAll(true));
+    }
+
+    await lopLoadRekapAll(false);
+  }
+
+  async function lopLoadRekapAll(force) {
+  lopResetUI();
+  lopSetStatus('Mengambil stok (rekapan pallet)...', '');
+
+  try {
+    // 1) Ambil stok_karung yang "aktif" di pallet (tersedia/terbuka) dan sisa > 0
+    // Supabase: gunakan or untuk qty_ekor_sisa > 0 atau qty_kg_sisa > 0
+    const { data: rows, error: eS } = await sb
+      .from('stok_karung')
+      .select('karung_id,item_id,pallet_id,status_karung,qty_ekor_sisa,qty_kg_sisa,tgl_produksi')
+      .in('status_karung', ['tersedia', 'terbuka'])
+      .or('qty_ekor_sisa.gt.0,qty_kg_sisa.gt.0');
+    if (eS) throw eS;
+
+    lopLastRows = (rows || []).filter(r => {
+      const ek = Number(r.qty_ekor_sisa ?? 0);
+      const kg = Number(r.qty_kg_sisa ?? 0);
+      return (ek > 0 || kg > 0);
+    });
+
+    // 2) Ambil item_name untuk semua item_id yang muncul
+    const itemIds = Array.from(new Set(lopLastRows.map(r => r.item_id).filter(Boolean)));
+    lopItemsMap = {};
+    if (itemIds.length) {
+      const { data: itemData, error: eI } = await sb
+        .from('items')
+        .select('item_id,item_name')
+        .in('item_id', itemIds);
+      if (eI) throw eI;
+      (itemData || []).forEach(it => { lopItemsMap[it.item_id] = it.item_name; });
+    }
+
+    // 3) Rekap per pallet (HANYA pallet yang ada isi)
+    lopByPallet = {};
+    lopLastRows.forEach(r => {
+      const pid = r.pallet_id || '(Belum ada pallet)';
+      if (!lopByPallet[pid]) lopByPallet[pid] = { pallet_id: pid, jumlahGoni: 0, totalEkor: 0, totalKg: 0 };
+      lopByPallet[pid].jumlahGoni += 1;
+      lopByPallet[pid].totalEkor += Number(r.qty_ekor_sisa ?? 0);
+      lopByPallet[pid].totalKg   += Number(r.qty_kg_sisa ?? 0);
+    });
+
+    const ordered = Object.values(lopByPallet)
+      .filter(x => Number(x.jumlahGoni ?? 0) > 0) // safety: pastikan tidak ada yg kosong
+      .sort((a,b) => String(a.pallet_id).localeCompare(String(b.pallet_id)));
+
+    if (!ordered.length) {
+      lopSetStatus('Tidak ada pallet yang memiliki goni aktif (sisa > 0).', '');
+      return;
+    }
+
+    lopRenderRekapTable(ordered);
+    lopSetStatus(`Rekapan siap. Total pallet berisi: ${ordered.length}. Klik nomor pallet untuk melihat detail.`, 'success');
+  } catch (e) {
+    console.error(e);
+    lopSetStatus('Gagal memuat rekapan: ' + (e.message || e), 'error');
+  }
+}
+
+  function lopRenderRekapTable(list) {
+  if (!lopTable || !lopTbody) return;
+  lopTbody.innerHTML = '';
+
+  (list || []).forEach(r => {
+    const tr = document.createElement('tr');
+    tr.className = 'row-clickable';
+    tr.title = 'Klik untuk lihat detail';
+    tr.onclick = () => lopShowDetail(r.pallet_id);
+
+    const tdP = document.createElement('td');
+    tdP.textContent = r.pallet_id;
+    tr.appendChild(tdP);
+
+    const tdJ = document.createElement('td');
+    tdJ.textContent = String(r.jumlahGoni ?? 0);
+    tr.appendChild(tdJ);
+
+    const tdE = document.createElement('td');
+    tdE.textContent = String(r.totalEkor ?? 0);
+    tr.appendChild(tdE);
+
+    const tdK = document.createElement('td');
+    tdK.textContent = Number(r.totalKg ?? 0).toFixed(2);
+    tr.appendChild(tdK);
+
+    lopTbody.appendChild(tr);
+  });
+
+  lopTable.style.display = 'table';
+}
+
+  function lopShowDetail(palletId) {
+    if (!lopDetailContainer || !lopDetailTbody || !lopDetailPallet) return;
+
+    lopDetailPallet.textContent = palletId;
+    lopDetailTbody.innerHTML = '';
+
+    const rows = (lopLastRows || [])
+      .filter(r => (r.pallet_id || '(Belum ada pallet)') === palletId)
+      .sort((a,b) => String(a.karung_id).localeCompare(String(b.karung_id)));
+
+    if (rows.length === 0) {
+      const tr = document.createElement('tr');
+      const td = document.createElement('td');
+      td.colSpan = 7;
+      td.textContent = 'Tidak ada karung aktif di pallet ini.';
+      tr.appendChild(td);
+      lopDetailTbody.appendChild(tr);
+      lopDetailContainer.style.display = 'block';
+      return;
+    }
+
+    rows.forEach((r, i) => {
+      const tr = document.createElement('tr');
+
+      const tdNo = document.createElement('td'); tdNo.textContent = String(i+1); tr.appendChild(tdNo);
+
+      const tdK = document.createElement('td'); tdK.textContent = r.karung_id || ''; tr.appendChild(tdK);
+
+      const tdItem = document.createElement('td');
+      tdItem.textContent = lopItemsMap[r.item_id] || r.item_id || '';
+      tr.appendChild(tdItem);
+
+      const tdTgl = document.createElement('td');
+      tdTgl.textContent = r.tgl_produksi ? String(r.tgl_produksi) : '';
+      tr.appendChild(tdTgl);
+
+      const tdE = document.createElement('td');
+      tdE.textContent = String(r.qty_ekor_sisa ?? 0);
+      tr.appendChild(tdE);
+
+      const tdKg = document.createElement('td');
+      tdKg.textContent = Number(r.qty_kg_sisa ?? 0).toFixed(2);
+      tr.appendChild(tdKg);
+
+      const tdS = document.createElement('td');
+      tdS.textContent = r.status_karung || '';
+      tr.appendChild(tdS);
+
+      lopDetailTbody.appendChild(tr);
+    });
+
+    lopDetailContainer.style.display = 'block';
   }
 
 
