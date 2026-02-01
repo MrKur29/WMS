@@ -462,6 +462,9 @@
 
         <button class="menu-btn" data-page="riwayat-receipt-slip">Riwayat Receipt Slip</button>
 
+        <div class="menu-title menu-supervisor-admin" style="margin-top:10px; display:none;">Master Data</div>
+        <button class="menu-btn menu-supervisor-admin" data-page="form-tambah-item" style="display:none;">Tambah Item</button>
+
         <div class="menu-title" style="margin-top:10px;">Menu Laporan</div>
         <button class="menu-btn" data-page="form-cek-karung">Cek Info Karung</button>
         <button class="menu-btn" data-page="laporan-stok">Laporan Stok Karung</button>
@@ -484,7 +487,61 @@
             </p>
           </div>
 
-          <!-- FORM TAMBAH BATCH ABF -->
+
+<!-- FORM TAMBAH ITEM (MASTER) -->
+<div id="page-form-tambah-item" style="display:none;">
+  <div class="container">
+    <div class="top-bar">
+      <div><strong>Form Tambah Item (Master)</strong></div>
+      <div><span id="ti-userInfo"></span></div>
+    </div>
+
+    <div class="small-note">
+      Digunakan untuk menambah master item baru ke tabel <code>items</code>.
+    </div>
+
+    <div class="section-title">1. Data Item</div>
+    <div class="field-row">
+      <div class="field">
+        <label for="ti-item-name">Item Name</label>
+        <input id="ti-item-name" type="text" placeholder="Contoh: Fillet Dada 200g" />
+      </div>
+      <div class="field" style="flex:0 0 220px;">
+        <label for="ti-item-code">Item Code</label>
+        <input id="ti-item-code" type="text" placeholder="Contoh: FD200" />
+      </div>
+    </div>
+
+    <div class="field-row">
+      <div class="field">
+        <label for="ti-item-category">Item Category</label>
+        <select id="ti-item-category"></select>
+        <input id="ti-item-category-new" type="text" placeholder="Ketik category baru..." style="display:none; margin-top:6px;" />
+      </div>
+      <div class="field">
+        <label for="ti-item-subcategory">Item Subcategory</label>
+        <select id="ti-item-subcategory"></select>
+        <input id="ti-item-subcategory-new" type="text" placeholder="Ketik subcategory baru..." style="display:none; margin-top:6px;" />
+      </div>
+      <div class="field" style="flex:0 0 220px;">
+        <label for="ti-item-grade">Item Grade</label>
+        <select id="ti-item-grade"></select>
+        <input id="ti-item-grade-new" type="text" placeholder="Ketik grade baru..." style="display:none; margin-top:6px;" />
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <div class="section-title">2. Simpan</div>
+    <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:6px;">
+      <button type="button" class="btn btn-primary" id="ti-btn-submit">Simpan Item</button>
+      <button type="button" class="btn btn-ghost" id="ti-btn-clear">Clear</button>
+    </div>
+    <div id="ti-status-message" class="status"></div>
+  </div>
+</div>
+
+           <!-- FORM TAMBAH BATCH ABF -->
           <div id="page-form-tambah-batch" style="display:none;">
             <div class="container">
               <div class="top-bar">
@@ -2152,6 +2209,7 @@
   const pageLaporanStokSemua  = document.getElementById('page-laporan-stok-semua');
   const pageLaporanMutasi     = document.getElementById('page-laporan-mutasi');
   const pageFormTambahBatch = document.getElementById('page-form-tambah-batch');
+  const pageFormTambahItem  = document.getElementById('page-form-tambah-item');
 
 
 
@@ -2850,6 +2908,9 @@ async function initRiwayatReceiptSlipOnce() {
       if (page === 'form-tambah-batch') {
       await initFormTambahBatchOnce();
       }
+      if (page === 'form-tambah-item') {
+        await initTambahItemOnce();
+      }
       if (page === 'form-pindah-lokasi') {
         await initPindahLokasiOnce();
       }
@@ -2922,6 +2983,7 @@ async function initRiwayatReceiptSlipOnce() {
     setPageVisible(pageFormGabungKarung, (page === 'form-gabung-karung'));
     setPageVisible(pageFormTambahBatch,  (page === 'form-tambah-batch'));
     setPageVisible(pageFormPickingSlip,  (page === 'form-picking-slip'));
+    setPageVisible(pageFormTambahItem,  (page === 'form-tambah-item'));
     setPageVisible(pageRiwayatPickingSlip,(page === 'riwayat-picking-slip'));
     setPageVisible(pageRiwayatReceiptSlip,(page === 'riwayat-receipt-slip'));
     setPageVisible(pageLaporanBatch,     (page === 'laporan-batch'));
@@ -2953,6 +3015,258 @@ async function initRiwayatReceiptSlipOnce() {
   let items = [];
   let lastPreviewData = {};
   let lastRakStructure = [];
+
+// ============== FORM TAMBAH ITEM (MASTER) ==============
+let tambahItemInitialized = false;
+
+const tiUserInfoEl = document.getElementById('ti-userInfo');
+const tiNameEl = document.getElementById('ti-item-name');
+const tiCodeEl = document.getElementById('ti-item-code');
+
+const tiCatSel = document.getElementById('ti-item-category');
+const tiSubSel = document.getElementById('ti-item-subcategory');
+const tiGradeSel = document.getElementById('ti-item-grade');
+
+const tiCatNew = document.getElementById('ti-item-category-new');
+const tiSubNew = document.getElementById('ti-item-subcategory-new');
+const tiGradeNew = document.getElementById('ti-item-grade-new');
+
+const tiBtnSubmit = document.getElementById('ti-btn-submit');
+const tiBtnClear = document.getElementById('ti-btn-clear');
+const tiStatusEl = document.getElementById('ti-status-message');
+
+function tiSetStatus(msg, type='') {
+  if (!tiStatusEl) return;
+  tiStatusEl.textContent = msg || '';
+  tiStatusEl.className = 'status' + (type ? (' ' + type) : '');
+}
+
+function uniqSorted(arr) {
+  return Array.from(new Set((arr || []).map(v => (v||'').trim()).filter(Boolean)))
+    .sort((a,b) => a.localeCompare(b, 'id', { sensitivity:'base' }));
+}
+
+function fillDropdownWithNewOption(selectEl, values, placeholder='-- Pilih --') {
+  if (!selectEl) return;
+  const current = selectEl.value;
+  selectEl.innerHTML = '';
+  const opt0 = document.createElement('option');
+  opt0.value = '';
+  opt0.textContent = placeholder;
+  selectEl.appendChild(opt0);
+
+  (values || []).forEach(v => {
+    const opt = document.createElement('option');
+    opt.value = v;
+    opt.textContent = v;
+    selectEl.appendChild(opt);
+  });
+
+  const optNew = document.createElement('option');
+  optNew.value = '__new__';
+  optNew.textContent = 'Tambah Baru...';
+  selectEl.appendChild(optNew);
+
+  // restore selection if possible
+  if (current && Array.from(selectEl.options).some(o => o.value === current)) {
+    selectEl.value = current;
+  } else {
+    selectEl.value = '';
+  }
+}
+
+function toggleNewInput(selectEl, inputEl) {
+  if (!selectEl || !inputEl) return;
+  const isNew = (selectEl.value === '__new__');
+  inputEl.style.display = isNew ? '' : 'none';
+  if (isNew) inputEl.focus();
+  if (!isNew) inputEl.value = '';
+}
+
+function getSelectOrNew(selectEl, inputEl) {
+  if (!selectEl) return '';
+  const v = (selectEl.value || '').trim();
+  if (v === '__new__') return (inputEl?.value || '').trim();
+  return v;
+}
+
+async function tiLoadDropdowns() {
+  // Ambil nilai unik dari tabel items (tanpa tabel master terpisah)
+  const { data, error } = await sb
+    .from('items')
+    .select('item_category, item_subcategory, item_grade')
+    .limit(10000);
+
+  if (error) throw error;
+
+  const cats  = uniqSorted((data||[]).map(x => x.item_category));
+  const subs  = uniqSorted((data||[]).map(x => x.item_subcategory));
+  const grades= uniqSorted((data||[]).map(x => x.item_grade));
+
+  fillDropdownWithNewOption(tiCatSel, cats, '-- Pilih category --');
+  fillDropdownWithNewOption(tiSubSel, subs, '-- Pilih subcategory --');
+  fillDropdownWithNewOption(tiGradeSel, grades, '-- Pilih grade --');
+
+  toggleNewInput(tiCatSel, tiCatNew);
+  toggleNewInput(tiSubSel, tiSubNew);
+  toggleNewInput(tiGradeSel, tiGradeNew);
+}
+
+function tiClearForm() {
+  if (tiNameEl) tiNameEl.value = '';
+  if (tiCodeEl) tiCodeEl.value = '';
+  if (tiCatSel) tiCatSel.value = '';
+  if (tiSubSel) tiSubSel.value = '';
+  if (tiGradeSel) tiGradeSel.value = '';
+  if (tiCatNew) { tiCatNew.value = ''; tiCatNew.style.display='none'; }
+  if (tiSubNew) { tiSubNew.value = ''; tiSubNew.style.display='none'; }
+  if (tiGradeNew) { tiGradeNew.value = ''; tiGradeNew.style.display='none'; }
+  tiSetStatus('', '');
+}
+
+async function refreshItemsEverywhere() {
+  // refresh global cache for dropdowns existing pages
+  const { data: itemData, error: itemError } = await sb
+    .from('items')
+    .select('item_id, item_name')
+    .order('item_name', { ascending: true });
+
+  if (itemError) throw itemError;
+
+  items = itemData || [];
+
+  // Panen ABF (Form Tambah Karung)
+  try {
+    if (typeof tambahKarungInitialized !== 'undefined' && tambahKarungInitialized && typeof populateItemOptions === 'function') {
+      const keyword = (itemSearchInput?.value || '').toLowerCase().trim();
+      const list = keyword ? items.filter(i => (i.item_name||'').toLowerCase().includes(keyword)) : items;
+      populateItemOptions(list);
+    }
+  } catch (e) { console.warn(e); }
+
+  // Laporan stok
+  try {
+    if (typeof laporanStokInitialized !== 'undefined' && laporanStokInitialized && lsItemSelect) {
+      const cur = lsItemSelect.value;
+      lsItemSelect.innerHTML = '<option value="">-- Pilih item --</option>';
+      (items || []).forEach(it => {
+        const opt = document.createElement('option');
+        opt.value = it.item_id;
+        opt.textContent = it.item_name;
+        lsItemSelect.appendChild(opt);
+      });
+      if (cur && Array.from(lsItemSelect.options).some(o => o.value === cur)) lsItemSelect.value = cur;
+    }
+  } catch (e) { console.warn(e); }
+
+  // Laporan stok semua (jika sudah init)
+  try {
+    if (typeof laporanStokSemuaInitialized !== 'undefined' && laporanStokSemuaInitialized) {
+      const sel = document.getElementById('lss-itemSelect');
+      if (sel) {
+        const cur = sel.value;
+        sel.innerHTML = '<option value="">-- Semua item --</option>';
+        (items || []).forEach(it => {
+          const opt = document.createElement('option');
+          opt.value = it.item_id;
+          opt.textContent = it.item_name;
+          sel.appendChild(opt);
+        });
+        if (cur && Array.from(sel.options).some(o => o.value === cur)) sel.value = cur;
+      }
+    }
+  } catch (e) { /* ignore */ }
+}
+
+async function tiSubmitItem() {
+  const item_name = (tiNameEl?.value || '').trim();
+  const item_code = (tiCodeEl?.value || '').trim();
+  const item_category = getSelectOrNew(tiCatSel, tiCatNew);
+  const item_subcategory = getSelectOrNew(tiSubSel, tiSubNew);
+  const item_grade = getSelectOrNew(tiGradeSel, tiGradeNew);
+
+  if (!item_name) { tiSetStatus('Item Name wajib diisi.', 'error'); return; }
+  if (!item_code) { tiSetStatus('Item Code wajib diisi.', 'error'); return; }
+  if (!item_category) { tiSetStatus('Item Category wajib dipilih / diisi.', 'error'); return; }
+  if (!item_subcategory) { tiSetStatus('Item Subcategory wajib dipilih / diisi.', 'error'); return; }
+  if (!item_grade) { tiSetStatus('Item Grade wajib dipilih / diisi.', 'error'); return; }
+
+  tiSetStatus('Menyimpan item...', '');
+
+  // Optional: cegah duplikat code (cek dulu)
+  try {
+    const { data: dup, error: eDup } = await sb
+      .from('items')
+      .select('item_id')
+      .eq('item_code', item_code)
+      .limit(1);
+
+    if (!eDup && (dup || []).length) {
+      tiSetStatus('Item Code sudah ada. Gunakan code yang berbeda.', 'error');
+      playBeep('error');
+      return;
+    }
+  } catch (e) {
+    // ignore duplicate check if column doesn't exist / RLS blocks
+  }
+
+  const payload = {
+    item_name,
+    item_code,
+    item_category,
+    item_subcategory,
+    item_grade
+  };
+
+  const { error } = await sb.from('items').insert(payload);
+
+  if (error) {
+    console.error(error);
+    tiSetStatus('Gagal menyimpan item: ' + (error.message || error), 'error');
+    playBeep('error');
+    return;
+  }
+
+  tiSetStatus('Item berhasil ditambahkan.', 'success');
+  playBeep('success');
+
+  // refresh dropdown sumber + cache item
+  try { await tiLoadDropdowns(); } catch (e) {}
+  try { await refreshItemsEverywhere(); } catch (e) {}
+
+  // clear input (keep dropdown selection)
+  if (tiNameEl) tiNameEl.value = '';
+  if (tiCodeEl) tiCodeEl.value = '';
+}
+
+async function initTambahItemOnce() {
+  if (tambahItemInitialized) return;
+  tambahItemInitialized = true;
+
+  if (tiUserInfoEl && operatorDisplayName) {
+    const r = currentProfile && currentProfile.role ? currentProfile.role : 'operator';
+    tiUserInfoEl.textContent = operatorDisplayName + (r ? ` (${r})` : '');
+  }
+
+  tiSetStatus('Memuat opsi dropdown...', '');
+
+  try {
+    await tiLoadDropdowns();
+    tiSetStatus('Form siap. Isi data lalu simpan.', 'success');
+  } catch (e) {
+    console.error(e);
+    tiSetStatus('Gagal memuat dropdown: ' + (e.message || e), 'error');
+  }
+
+  if (tiCatSel) tiCatSel.addEventListener('change', () => toggleNewInput(tiCatSel, tiCatNew));
+  if (tiSubSel) tiSubSel.addEventListener('change', () => toggleNewInput(tiSubSel, tiSubNew));
+  if (tiGradeSel) tiGradeSel.addEventListener('change', () => toggleNewInput(tiGradeSel, tiGradeNew));
+
+  if (tiBtnSubmit) tiBtnSubmit.addEventListener('click', tiSubmitItem);
+  if (tiBtnClear) tiBtnClear.addEventListener('click', tiClearForm);
+}
+
+
 
   const tglAbfInput       = document.getElementById('tglAbf');
   const batchSelect       = document.getElementById('batchSelect');
