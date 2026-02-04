@@ -473,6 +473,7 @@
         <button class="menu-btn" data-page="laporan-stok-semua">Laporan Stok Semua Barang</button>
 	      <button class="menu-btn" data-page="laporan-batch">Laporan Batch Pembekuan</button>
         <button class="menu-btn" data-page="laporan-mutasi">Laporan Mutasi / Log Karung</button>
+        <button class="menu-btn" data-page="laporan-reprocess">Laporan Rekapan Reprocess</button>
       </aside>
 
       <!-- MAIN CONTENT -->
@@ -1713,6 +1714,107 @@
             </div>
           </div>
 
+
+          <!-- LAPORAN REKAPAN REPROCESS -->
+          <div id="page-laporan-reprocess" style="display:none;">
+            <div class="container">
+              <div class="top-bar">
+                <div><strong>Laporan Rekapan Reprocess</strong></div>
+                <div><span id="rpr-userInfo"></span></div>
+              </div>
+
+              <div class="small-note">
+                Menampilkan picking slip dengan tujuan <strong>reprocess</strong>.
+                Klik <strong>Detail</strong> untuk melihat rekap per item (di atas) dan rincian karung (di bawah).
+              </div>
+
+              <div class="field-row" style="margin-top:10px;">
+                <div class="field" style="flex:0 0 180px;">
+                  <label for="rpr-date-from">Dari Tanggal</label>
+                  <input type="date" id="rpr-date-from" />
+                </div>
+                <div class="field" style="flex:0 0 180px;">
+                  <label for="rpr-date-to">Sampai Tanggal</label>
+                  <input type="date" id="rpr-date-to" />
+                </div>
+                <div class="field">
+                  <label for="rpr-item">Item (opsional)</label>
+                  <select id="rpr-item">
+                    <option value="">-- Semua item --</option>
+                  </select>
+                </div>
+                <div class="field" style="flex:0 0 160px;">
+                  <label>&nbsp;</label>
+                  <button class="btn btn-primary" id="rpr-btn-search">Tampilkan</button>
+                </div>
+              </div>
+
+              <div id="rpr-status" class="status"></div>
+
+              <!-- DETAIL VIEW (muncul saat klik Detail) -->
+              <div id="rpr-detail-wrap" style="display:none; margin-top:12px;">
+                <div class="section-title" style="margin-top:0;">Detail Reprocess — <span id="rpr-detail-psno"></span></div>
+                <div class="small-note" style="margin-top:2px;">
+                  Tanggal: <strong><span id="rpr-detail-date"></span></strong>
+                  <span style="margin-left:10px;">Total: <strong><span id="rpr-detail-total"></span></strong></span>
+                </div>
+
+                <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:6px;">
+                  <button type="button" class="btn btn-primary btn-small" id="rpr-btn-print-ps">Print PS Ini</button>
+                  <button type="button" class="btn btn-ghost btn-small" id="rpr-btn-close-detail">Tutup Detail</button>
+                </div>
+
+                <div class="divider"></div>
+
+                <!-- Rekap per Item (untuk PS terpilih) -->
+                <div class="section-title" style="margin-top:0;">Rekap per Item</div>
+                <table class="rak-table" id="rpr-item-rekap-table" style="margin-top:8px;">
+                  <thead>
+                    <tr>
+                      <th>Item</th>
+                      <th>Jumlah Karung</th>
+                      <th>Total Ekor</th>
+                      <th>Total Kg</th>
+                    </tr>
+                  </thead>
+                  <tbody id="rpr-item-rekap-tbody"></tbody>
+                </table>
+
+                <div class="divider"></div>
+
+                <!-- Detail seperti sekarang -->
+                <div class="section-title" style="margin-top:0;">Rincian Karung</div>
+                <table class="rak-table" id="rpr-detail-table" style="margin-top:8px;">
+                  <thead>
+                    <tr>
+                      <th>Item</th>
+                      <th>No Karung</th>
+                      <th>Ekor</th>
+                      <th>Kg</th>
+                      <th>Tgl Produksi</th>
+                    </tr>
+                  </thead>
+                  <tbody id="rpr-detail-tbody"></tbody>
+                </table>
+              </div>
+
+              <!-- REKAP LIST -->
+              <table class="rak-table" id="rpr-table" style="display:none; margin-top:12px;">
+                <thead>
+                  <tr>
+                    <th>Tanggal</th>
+                    <th>No Picking Slip</th>
+                    <th>Karung</th>
+                    <th>Ekor</th>
+                    <th>Kg</th>
+                    <th style="width:170px;">Aksi</th>
+                  </tr>
+                </thead>
+                <tbody id="rpr-tbody"></tbody>
+              </table>
+            </div>
+          </div>
+
 <div id="page-laporan-stok" style="display:none;">
             <div class="container">
               <div class="top-bar">
@@ -2208,6 +2310,7 @@
   const pageLaporanOpnamePallet = document.getElementById('page-laporan-opname-pallet');
   const pageLaporanStokSemua  = document.getElementById('page-laporan-stok-semua');
   const pageLaporanMutasi     = document.getElementById('page-laporan-mutasi');
+  const pageLaporanReprocess  = document.getElementById('page-laporan-reprocess');
   const pageFormTambahBatch = document.getElementById('page-form-tambah-batch');
   const pageFormTambahItem  = document.getElementById('page-form-tambah-item');
 
@@ -2889,7 +2992,371 @@ async function initRiwayatReceiptSlipOnce() {
     await initPindahLokasiOnce();
   }
 
-  // ====== MENU HANDLER ======
+  
+  // ===================== LAPORAN REKAPAN REPROCESS =====================
+  let laporanReprocessInitialized = false;
+
+  async function initLaporanReprocessOnce() {
+    if (laporanReprocessInitialized) return;
+    laporanReprocessInitialized = true;
+
+    const rprUserInfoEl   = document.getElementById('rpr-userInfo');
+    const rprDateFromEl   = document.getElementById('rpr-date-from');
+    const rprDateToEl     = document.getElementById('rpr-date-to');
+    const rprItemEl       = document.getElementById('rpr-item');
+    const rprBtnSearch    = document.getElementById('rpr-btn-search');
+    const rprStatusEl     = document.getElementById('rpr-status');
+    const rprTableEl      = document.getElementById('rpr-table');
+    const rprTbodyEl      = document.getElementById('rpr-tbody');
+
+    const rprDetailWrap   = document.getElementById('rpr-detail-wrap');
+    const rprDetailPsNo   = document.getElementById('rpr-detail-psno');
+    const rprDetailDate   = document.getElementById('rpr-detail-date');
+    const rprDetailTotal  = document.getElementById('rpr-detail-total');
+    const rprBtnPrintPs   = document.getElementById('rpr-btn-print-ps');
+    const rprBtnCloseDet  = document.getElementById('rpr-btn-close-detail');
+
+    const rprItemRekapTbody = document.getElementById('rpr-item-rekap-tbody');
+    const rprDetailTbody     = document.getElementById('rpr-detail-tbody');
+
+    // state
+    let currentHeaders = [];
+    let detailsByPicking = {};
+    let selectedPickingId = null;
+
+    const setStatus = (msg, type) => {
+      if (!rprStatusEl) return;
+      rprStatusEl.textContent = msg || '';
+      rprStatusEl.className = 'status' + (type ? (' ' + type) : '');
+    };
+
+    const escapeHtmlLocal = (s) => escapeHtml(String(s ?? ''));
+
+    const toISODateLocal = (d) => {
+      const tz = d.getTimezoneOffset() * 60000;
+      return new Date(d.getTime() - tz).toISOString().slice(0, 10);
+    };
+
+    // defaults: 7 hari terakhir
+    const today = new Date();
+    const d7 = new Date(today.getTime() - 6 * 86400000);
+    if (rprDateToEl && !rprDateToEl.value) rprDateToEl.value = toISODateLocal(today);
+    if (rprDateFromEl && !rprDateFromEl.value) rprDateFromEl.value = toISODateLocal(d7);
+
+    if (rprUserInfoEl && operatorDisplayName) {
+      rprUserInfoEl.textContent = operatorDisplayName;
+    }
+
+    // load items dropdown
+    try {
+      const { data: items, error } = await sb
+        .from('items')
+        .select('item_id, item_name')
+        .order('item_name', { ascending: true });
+      if (!error && rprItemEl) {
+        const firstOpt = document.createElement('option');
+        firstOpt.value = '';
+        firstOpt.textContent = '-- Semua item --';
+        rprItemEl.innerHTML = '';
+        rprItemEl.appendChild(firstOpt);
+        (items || []).forEach(it => {
+          const opt = document.createElement('option');
+          opt.value = it.item_id;
+          opt.textContent = it.item_name || it.item_id;
+          rprItemEl.appendChild(opt);
+        });
+      }
+    } catch (e) {
+      console.warn('Gagal load item dropdown reprocess:', e);
+    }
+
+    const hideDetail = () => {
+      selectedPickingId = null;
+      if (rprDetailWrap) rprDetailWrap.style.display = 'none';
+      if (rprItemRekapTbody) rprItemRekapTbody.innerHTML = '';
+      if (rprDetailTbody) rprDetailTbody.innerHTML = '';
+    };
+
+    const renderRekapList = (headers) => {
+      if (!rprTbodyEl || !rprTableEl) return;
+      rprTbodyEl.innerHTML = '';
+
+      (headers || []).forEach(h => {
+        const pid = h.id;
+        const det = detailsByPicking[pid] || [];
+        const karungSet = new Set(det.map(x => x.karung_id).filter(Boolean));
+        const totalKarung = karungSet.size;
+        const totalEkor = det.reduce((a,x)=>a + Number(x.qty_ekor_keluar||0), 0);
+        const totalKg   = det.reduce((a,x)=>a + Number(x.qty_kg_keluar||0), 0);
+
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${escapeHtmlLocal(h.tgl_picking || '')}</td>
+          <td><strong>${escapeHtmlLocal(h.no_picking_slip || '')}</strong></td>
+          <td style="text-align:right;">${totalKarung}</td>
+          <td style="text-align:right;">${totalEkor}</td>
+          <td style="text-align:right;">${totalKg.toFixed(2)}</td>
+          <td>
+            <button class="btn btn-ghost btn-small" data-action="detail">Detail</button>
+            <button class="btn btn-primary btn-small" data-action="print">Print</button>
+          </td>
+        `;
+
+        const btnDetail = tr.querySelector('button[data-action="detail"]');
+        const btnPrint  = tr.querySelector('button[data-action="print"]');
+
+        if (btnDetail) {
+          btnDetail.addEventListener('click', () => openDetail(pid));
+        }
+        if (btnPrint) {
+          btnPrint.addEventListener('click', async () => {
+            btnPrint.disabled = true;
+            btnPrint.textContent = 'Memuat...';
+            try {
+              await printPickingSlipById(pid);
+              setStatus('OK. Print window dibuka.', 'success');
+            } catch (e) {
+              console.error(e);
+              setStatus('Gagal print: ' + (e.message || e), 'error');
+            } finally {
+              btnPrint.disabled = false;
+              btnPrint.textContent = 'Print';
+            }
+          });
+        }
+
+        rprTbodyEl.appendChild(tr);
+      });
+
+      rprTableEl.style.display = (headers && headers.length) ? 'table' : 'none';
+    };
+
+    const openDetail = (pickingId) => {
+      const header = currentHeaders.find(x => x.id === pickingId);
+      const det = detailsByPicking[pickingId] || [];
+      selectedPickingId = pickingId;
+
+      if (!header) return;
+
+      if (rprDetailPsNo) rprDetailPsNo.textContent = header.no_picking_slip || '';
+      if (rprDetailDate) rprDetailDate.textContent = header.tgl_picking || '';
+
+      const karungSet = new Set(det.map(x => x.karung_id).filter(Boolean));
+      const totalKarung = karungSet.size;
+      const totalEkor = det.reduce((a,x)=>a + Number(x.qty_ekor_keluar||0), 0);
+      const totalKg   = det.reduce((a,x)=>a + Number(x.qty_kg_keluar||0), 0);
+      if (rprDetailTotal) rprDetailTotal.textContent = `${totalKarung} karung / ${totalEkor} ekor / ${totalKg.toFixed(2)} kg`;
+
+      // rekap per item (tampil di atas)
+      const perItem = {};
+      det.forEach(r => {
+        const key = r.item_name || r.item_id || 'UNKNOWN';
+        if (!perItem[key]) perItem[key] = { item: key, karungSet: new Set(), ekor: 0, kg: 0 };
+        perItem[key].karungSet.add(r.karung_id || '');
+        perItem[key].ekor += Number(r.qty_ekor_keluar || 0);
+        perItem[key].kg += Number(r.qty_kg_keluar || 0);
+      });
+
+      const itemRows = Object.values(perItem).sort((a,b)=>String(a.item).localeCompare(String(b.item)));
+
+      if (rprItemRekapTbody) {
+        rprItemRekapTbody.innerHTML = '';
+        itemRows.forEach(it => {
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td>${escapeHtmlLocal(it.item)}</td>
+            <td style="text-align:right;">${it.karungSet.size}</td>
+            <td style="text-align:right;">${it.ekor}</td>
+            <td style="text-align:right;">${it.kg.toFixed(2)}</td>
+          `;
+          rprItemRekapTbody.appendChild(tr);
+        });
+      }
+
+      // detail rows (di bawah)
+      if (rprDetailTbody) {
+        rprDetailTbody.innerHTML = '';
+        det
+          .slice()
+          .sort((a,b) => {
+            const ia = (a.item_name || a.item_id || '');
+            const ib = (b.item_name || b.item_id || '');
+            if (ia !== ib) return ia.localeCompare(ib);
+            return String(a.karung_id || '').localeCompare(String(b.karung_id || ''));
+          })
+          .forEach(r => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+              <td>${escapeHtmlLocal(r.item_name || r.item_id || '')}</td>
+              <td>${escapeHtmlLocal(r.karung_id || '')}</td>
+              <td style="text-align:right;">${Number(r.qty_ekor_keluar || 0)}</td>
+              <td style="text-align:right;">${Number(r.qty_kg_keluar || 0).toFixed(2)}</td>
+              <td>${escapeHtmlLocal(r.tgl_produksi || '')}</td>
+            `;
+            rprDetailTbody.appendChild(tr);
+          });
+      }
+
+      // Print PS yang sedang dibuka detail (per PS)
+      if (rprBtnPrintPs) {
+        rprBtnPrintPs.onclick = async () => {
+          if (!selectedPickingId) return;
+          rprBtnPrintPs.disabled = true;
+          rprBtnPrintPs.textContent = 'Memuat...';
+          try {
+            await printPickingSlipById(selectedPickingId);
+            setStatus('OK. Print window dibuka.', 'success');
+          } catch (e) {
+            console.error(e);
+            setStatus('Gagal print: ' + (e.message || e), 'error');
+          } finally {
+            rprBtnPrintPs.disabled = false;
+            rprBtnPrintPs.textContent = 'Print PS Ini';
+          }
+        };
+      }
+
+      if (rprDetailWrap) rprDetailWrap.style.display = 'block';
+      try { rprDetailWrap.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch(e) {}
+    };
+
+    // Print util: ambil header + detail, lalu pakai window print picking slip yang sudah ada
+    async function printPickingSlipById(slipId) {
+      const { data: hdr, error: e1 } = await sb
+        .from('picking_slip')
+        .select('*')
+        .eq('id', slipId)
+        .single();
+      if (e1) throw e1;
+
+      const { data: det, error: e2 } = await sb
+        .from('picking_slip_detail')
+        .select('id, picking_slip_id, karung_id, item_id, qty_ekor_keluar, qty_kg_keluar')
+        .eq('picking_slip_id', slipId)
+        .order('id', { ascending: true });
+      if (e2) throw e2;
+
+      const itemIds = Array.from(new Set((det || []).map(x => x.item_id).filter(Boolean)));
+      let itemMap = {};
+      if (itemIds.length) {
+        const { data: items, error: e3 } = await sb
+          .from('items')
+          .select('item_id, item_name')
+          .in('item_id', itemIds);
+        if (e3) throw e3;
+        (items || []).forEach(it => itemMap[it.item_id] = it.item_name);
+      }
+
+      const detailMapped = (det || []).map(r => ({
+        ...r,
+        item_name: itemMap[r.item_id] || r.item_id,
+      }));
+
+      openPickingSlipWindow(hdr.no_picking_slip || '(tanpa nomor)', hdr, detailMapped);
+    }
+
+    async function runSearch() {
+      hideDetail();
+
+      const df = (rprDateFromEl?.value || '').trim();
+      const dt = (rprDateToEl?.value || '').trim();
+      const itemId = (rprItemEl?.value || '').trim();
+
+      setStatus('Memuat data reprocess...', '');
+      if (rprTableEl) rprTableEl.style.display = 'none';
+
+      let q = sb
+        .from('picking_slip')
+        .select('id, no_picking_slip, tgl_picking')
+        .eq('tujuan', 'reprocess')
+        .order('tgl_picking', { ascending: false })
+        .order('no_picking_slip', { ascending: false });
+
+      if (df) q = q.gte('tgl_picking', df);
+      if (dt) q = q.lte('tgl_picking', dt);
+
+      const { data: headers, error: e1 } = await q;
+      if (e1) { console.error(e1); setStatus('Gagal load picking slip: ' + (e1.message || ''), 'error'); return; }
+
+      const headerList = headers || [];
+      if (!headerList.length) {
+        currentHeaders = [];
+        detailsByPicking = {};
+        renderRekapList([]);
+        setStatus('Tidak ada data reprocess pada range tanggal tersebut.', '');
+        return;
+      }
+
+      const ids = headerList.map(x => x.id);
+
+      let qd = sb
+        .from('picking_slip_detail')
+        .select('id, picking_slip_id, karung_id, item_id, qty_ekor_keluar, qty_kg_keluar')
+        .in('picking_slip_id', ids)
+        .order('id', { ascending: true });
+
+      // kalau item filter dipilih: rekap list akan terfilter berdasarkan detail yg match item
+      if (itemId) qd = qd.eq('item_id', itemId);
+
+      const { data: detRows, error: e2 } = await qd;
+      if (e2) { console.error(e2); setStatus('Gagal load detail: ' + (e2.message || ''), 'error'); return; }
+
+      const det = detRows || [];
+      let filteredHeaders = headerList;
+      if (itemId) {
+        const has = new Set(det.map(x => x.picking_slip_id));
+        filteredHeaders = headerList.filter(h => has.has(h.id));
+        if (!filteredHeaders.length) {
+          currentHeaders = [];
+          detailsByPicking = {};
+          renderRekapList([]);
+          setStatus('Tidak ada reprocess untuk item tersebut pada range tanggal.', '');
+          return;
+        }
+      }
+
+      const itemIds = Array.from(new Set(det.map(x => x.item_id).filter(Boolean)));
+      let itemMap = {};
+      if (itemIds.length) {
+        const { data: items, error: e3 } = await sb
+          .from('items')
+          .select('item_id, item_name')
+          .in('item_id', itemIds);
+        if (!e3) (items || []).forEach(it => itemMap[it.item_id] = it.item_name);
+      }
+
+      const karungIds = Array.from(new Set(det.map(x => x.karung_id).filter(Boolean)));
+      let tglProdMap = {};
+      if (karungIds.length) {
+        const { data: ks, error: e4 } = await sb
+          .from('stok_karung')
+          .select('karung_id, tgl_produksi')
+          .in('karung_id', karungIds);
+        if (!e4) (ks || []).forEach(k => tglProdMap[k.karung_id] = k.tgl_produksi);
+      }
+
+      detailsByPicking = {};
+      det.forEach(r => {
+        if (!detailsByPicking[r.picking_slip_id]) detailsByPicking[r.picking_slip_id] = [];
+        detailsByPicking[r.picking_slip_id].push({
+          ...r,
+          item_name: itemMap[r.item_id] || r.item_id,
+          tgl_produksi: tglProdMap[r.karung_id] || ''
+        });
+      });
+
+      currentHeaders = filteredHeaders;
+      renderRekapList(filteredHeaders);
+
+      setStatus(`OK. Ditemukan ${filteredHeaders.length} picking slip reprocess.`, 'success');
+    }
+
+    if (rprBtnSearch) rprBtnSearch.addEventListener('click', runSearch);
+    if (rprBtnCloseDet) rprBtnCloseDet.addEventListener('click', hideDetail);
+  }
+
+
+// ====== MENU HANDLER ======
   menuButtons.forEach(btn => {
     btn.addEventListener('click', async () => {
       const page = btn.dataset.page;
@@ -2953,7 +3420,11 @@ async function initRiwayatReceiptSlipOnce() {
       if (page === 'laporan-mutasi') {
       await initLaporanMutasiOnce();
       }
-      if (window.innerWidth <= 768) {
+      
+      if (page === 'laporan-reprocess') {
+        await initLaporanReprocessOnce();
+      }
+if (window.innerWidth <= 768) {
         appShellEl.classList.add('mobile-sidebar-collapsed');
       }
     });
@@ -2992,6 +3463,7 @@ async function initRiwayatReceiptSlipOnce() {
     setPageVisible(pageLaporanOpnamePallet,(page === 'laporan-opname-pallet'));
     setPageVisible(pageLaporanStokSemua, (page === 'laporan-stok-semua'));
     setPageVisible(pageLaporanMutasi,    (page === 'laporan-mutasi'));
+    setPageVisible(pageLaporanReprocess,(page === 'laporan-reprocess'));
   }
 
 
