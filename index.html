@@ -7036,15 +7036,42 @@ function psBeep(kind) {
     lsStatusMessage.textContent = 'Mengambil data stok dari server...';
     lsStatusMessage.className = 'status';
 
-    const { data: karungData, error: karungError } = await sb
-      .from('stok_karung')
-      .select('karung_id, pallet_id, status_karung, qty_ekor_sisa, qty_kg_sisa, tgl_produksi')
-      .eq('item_id', itemId)
-      .in('status_karung', ['tersedia', 'terbuka']);
+    // NOTE: Supabase select default bisa terpotong (mis. 1000 row). Untuk mencegah pallet hilang
+    // saat satu item punya karung sangat banyak, kita tarik data dengan pagination (.range).
+    const pageSize = 1000;
+    let from = 0;
+    let karungData = [];
+    let karungError = null;
+
+    try {
+      while (true) {
+      const { data, error } = await sb
+        .from('stok_karung')
+        .select('karung_id, pallet_id, status_karung, qty_ekor_sisa, qty_kg_sisa, tgl_produksi')
+        .eq('item_id', itemId)
+        .in('status_karung', ['tersedia', 'terbuka'])
+        .range(from, from + pageSize - 1);
+
+      if (error) { karungError = error; break; }
+
+      const batch = data || [];
+      karungData = karungData.concat(batch);
+
+      // Jika batch < pageSize artinya sudah habis
+      if (batch.length < pageSize) break;
+
+      from += pageSize;
+
+      // Update status agar user tahu sedang lanjut ambil data (tanpa mengubah flow lain)
+      lsStatusMessage.textContent = `Mengambil data stok dari server... (${karungData.length.toLocaleString('id-ID')}+ baris)`;
+      }
+    } catch (e) {
+      karungError = e;
+    }
 
     if (karungError) {
       console.error(karungError);
-      lsStatusMessage.textContent = 'Gagal memuat stok: ' + karungError.message;
+      lsStatusMessage.textContent = 'Gagal memuat stok: ' + (karungError.message || karungError);
       lsStatusMessage.className = 'status error';
       return;
     }
@@ -7409,7 +7436,33 @@ function showDetailKarungForPallet(pallet, rows) {
     lopStatusEl.textContent = msg || '';
     lopStatusEl.className = 'status' + (kind ? (' ' + kind) : '');
   }
+// Ambil semua stok_karung "aktif" dengan pagination (hindari limit default Supabase ~1000 rows)
+async function lopFetchAktifStokKarungPaged(onProgress) {
+  const pageSize = 1000;
+  let from = 0;
+  let all = [];
+  while (true) {
+    const { data, error } = await sb
+      .from('stok_karung')
+      .select('karung_id,item_id,pallet_id,status_karung,qty_ekor_sisa,qty_kg_sisa,tgl_produksi')
+      .in('status_karung', ['tersedia', 'terbuka'])
+      .or('qty_ekor_sisa.gt.0,qty_kg_sisa.gt.0')
+      .range(from, from + pageSize - 1);
 
+    if (error) throw error;
+
+    const batch = (data || []);
+    all = all.concat(batch);
+
+    if (typeof onProgress === 'function') {
+      onProgress(all.length, batch.length);
+    }
+
+    if (batch.length < pageSize) break;
+    from += pageSize;
+  }
+  return all;
+}
   async function initLaporanOpnamePalletOnce() {
     if (laporanOpnamePalletInitialized) return;
     laporanOpnamePalletInitialized = true;
@@ -7433,14 +7486,15 @@ function showDetailKarungForPallet(pallet, rows) {
   try {
     // 1) Ambil stok_karung yang "aktif" di pallet (tersedia/terbuka) dan sisa > 0
     // Supabase: gunakan or untuk qty_ekor_sisa > 0 atau qty_kg_sisa > 0
-    const { data: rows, error: eS } = await sb
-      .from('stok_karung')
-      .select('karung_id,item_id,pallet_id,status_karung,qty_ekor_sisa,qty_kg_sisa,tgl_produksi')
-      .in('status_karung', ['tersedia', 'terbuka'])
-      .or('qty_ekor_sisa.gt.0,qty_kg_sisa.gt.0');
-    if (eS) throw eS;
 
-    lopLastRows = (rows || []).filter(r => {
+const rows = await lopFetchAktifStokKarungPaged((loaded, lastBatch) => {
+  // update status sesekali supaya user tahu masih jalan (tidak spam)
+  if (loaded === lastBatch) {
+    lopSetStatus('Mengambil stok (rekapan pallet)...', '');
+  } else if (loaded % 2000 === 0) {
+    lopSetStatus(`Mengambil stok (rekapan pallet)... sudah ${loaded} baris`, '');
+  }
+});    lopLastRows = (rows || []).filter(r => {
       const ek = Number(r.qty_ekor_sisa ?? 0);
       const kg = Number(r.qty_kg_sisa ?? 0);
       return (ek > 0 || kg > 0);
