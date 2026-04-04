@@ -3516,7 +3516,10 @@ if (window.innerWidth <= 768) {
       } else {
         d.setMonth(d.getMonth() + 6);
       }
-      return d.toISOString().slice(0, 10);
+      const y   = d.getFullYear();
+      const m   = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${y}-${m}-${day}`;
     } catch (e) { return ''; }
   }
 
@@ -5492,7 +5495,7 @@ try {
       <div class="label-right">
         <div class="label-item-name">${escapeHtml(preview.itemName || '')}</div>
         <div class="label-row"><span class="label-text">Tgl Produksi</span><span>${escapeHtml(preview.tglProduksi || '')}</span></div>
-        <div class="label-row" style="color:#b91c1c; font-weight:700;"><span class="label-text">Tgl Expired</span><span>${escapeHtml(expiredDate)}</span></div>
+        <div class="label-row"><span class="label-text">Tgl Expired</span><span>${escapeHtml(expiredDate)}</span></div>
         <div class="label-row"><span class="label-text">Ekor</span><span>${Number(preview.totalEkor || 0)}</span></div>
         <div class="label-row"><span class="label-text">Kg</span><span>${Number(preview.totalKg || 0).toFixed(2)}</span></div>
         ${memoText ? `<div class="label-memo">${escapeHtml(memoText)}</div>` : ``}
