@@ -671,6 +671,7 @@
                 Total per karung: <strong><span id="totalEkor">0</span> ekor</strong> /
                 <strong><span id="totalKg">0.00</span> kg</strong>
               </div>
+              <div id="tk-pack-warning" style="display:none; background:#fffbeb; border:1px solid #f59e0b; color:#92400e; border-radius:6px; padding:8px 10px; margin-top:6px; font-size:0.9rem;"></div>
 
               <div class="section-title">4. Operator & Catatan</div>
               <div class="field-row">
@@ -738,6 +739,8 @@
                   <input type="number" id="bd-kg" inputmode="decimal" min="0" step="0.01" placeholder="0.00">
                 </div>
               </div>
+
+              <div id="bd-pack-warning" style="display:none; background:#fffbeb; border:1px solid #f59e0b; color:#92400e; border-radius:6px; padding:8px 10px; margin-top:6px; font-size:0.9rem;"></div>
 
               <!-- Admin-only: opsi langsung dianggap saldo awal (tanpa Receipt Slip manual) -->
               <div class="field" id="bd-saldo-awal-wrap" style="display:none; margin-top:6px;">
@@ -3485,6 +3488,56 @@ if (window.innerWidth <= 768) {
   ];
 
   let items = [];
+  let itemCategoryMap = {};  // item_id -> item_category
+  let itemStdMap = {};       // item_id -> { ekorMin, ekorMax, kgMin, kgMax }
+
+  function rebuildItemMaps() {
+    itemCategoryMap = {};
+    itemStdMap = {};
+    (items || []).forEach(it => {
+      if (!it.item_id) return;
+      itemCategoryMap[it.item_id] = it.item_category || '';
+      itemStdMap[it.item_id] = {
+        kgPerEkorMin: (it.std_kg_min != null) ? Number(it.std_kg_min) : null,
+        kgPerEkorMax: (it.std_kg_max != null) ? Number(it.std_kg_max) : null
+      };
+    });
+  }
+
+  // Hitung tanggal expired dari tgl produksi + kategori item
+  // Karkas = 1 tahun, lainnya = 6 bulan
+  function calcExpiredDate(tglProduksi, itemCategory) {
+    if (!tglProduksi) return '';
+    try {
+      const d = new Date(tglProduksi + 'T00:00:00');
+      if (isNaN(d.getTime())) return '';
+      if ((itemCategory || '').toLowerCase() === 'karkas') {
+        d.setFullYear(d.getFullYear() + 1);
+      } else {
+        d.setMonth(d.getMonth() + 6);
+      }
+      return d.toISOString().slice(0, 10);
+    } catch (e) { return ''; }
+  }
+
+  // Cek apakah berat per ekor (kg/ekor) di luar rentang standar untuk item tersebut.
+  // std_kg_min dan std_kg_max di tabel items menyimpan berat per ekor (kg/unit).
+  // Contoh: AU 0.6 → min=0.60, max=0.69
+  // Mengembalikan string peringatan atau null jika OK / tidak ada standar.
+  function checkPackRange(itemId, ekor, kg) {
+    const std = itemStdMap[itemId];
+    if (!std) return null;
+    if (std.kgPerEkorMin === null && std.kgPerEkorMax === null) return null;
+    if (!ekor || ekor <= 0) return null;  // tidak ada ekor, lewati
+
+    const kgPerEkor = kg / ekor;
+    const w = [];
+    if (std.kgPerEkorMin !== null && kgPerEkor < std.kgPerEkorMin)
+      w.push(`Berat/ekor (${kgPerEkor.toFixed(2)} kg) di bawah standar minimum (${std.kgPerEkorMin} kg/ekor)`);
+    if (std.kgPerEkorMax !== null && kgPerEkor > std.kgPerEkorMax)
+      w.push(`Berat/ekor (${kgPerEkor.toFixed(2)} kg) melebihi standar maksimum (${std.kgPerEkorMax} kg/ekor)`);
+    return w.length > 0 ? '⚠️ ' + w.join(' | ') : null;
+  }
   let lastPreviewData = {};
   let lastRakStructure = [];
 
@@ -3600,12 +3653,13 @@ async function refreshItemsEverywhere() {
   // refresh global cache for dropdowns existing pages
   const { data: itemData, error: itemError } = await sb
     .from('items')
-    .select('item_id, item_name')
+    .select('item_id, item_name, item_category, std_kg_min, std_kg_max')
     .order('item_name', { ascending: true });
 
   if (itemError) throw itemError;
 
   items = itemData || [];
+  rebuildItemMaps();
 
   // Panen ABF (Form Tambah Karung)
   try {
@@ -3777,7 +3831,7 @@ async function initTambahItemOnce() {
 
     const { data: itemData, error: itemError } = await sb
       .from('items')
-      .select('item_id, item_name')
+      .select('item_id, item_name, item_category, std_kg_min, std_kg_max')
       .order('item_name', { ascending: true });
 
     if (itemError) {
@@ -3788,6 +3842,7 @@ async function initTambahItemOnce() {
     }
 
     items = itemData || [];
+    rebuildItemMaps();
     populateItemOptions(items);
     statusMessage.textContent = 'Form Tambah Karung siap digunakan.';
     statusMessage.className = 'status success';
@@ -3910,7 +3965,7 @@ async function initTambahItemOnce() {
 
     const { data: itemData, error: itemError } = await sb
       .from('items')
-      .select('item_id, item_name')
+      .select('item_id, item_name, item_category, std_kg_min, std_kg_max')
       .order('item_name', { ascending: true });
 
     if (itemError) {
@@ -3920,11 +3975,21 @@ async function initTambahItemOnce() {
     }
 
     const list = itemData || [];
+    // Merge ke maps global (bisa dipakai calcExpiredDate & checkPackRange)
+    list.forEach(it => {
+      if (!it.item_id) return;
+      itemCategoryMap[it.item_id] = it.item_category || '';
+      itemStdMap[it.item_id] = {
+        kgPerEkorMin: (it.std_kg_min != null) ? Number(it.std_kg_min) : null,
+        kgPerEkorMax: (it.std_kg_max != null) ? Number(it.std_kg_max) : null
+      };
+    });
     bdItemSel.innerHTML = '';
     list.forEach(item => {
       const opt = document.createElement('option');
       opt.value = item.item_id;
       opt.textContent = item.item_name;
+      opt.dataset.category = item.item_category || '';
       bdItemSel.appendChild(opt);
     });
 
@@ -3949,6 +4014,23 @@ if (!itemId) throw new Error('Item wajib dipilih.');
         if (!tglProduksi) throw new Error('Tgl Produksi wajib diisi.');
         if (qtyEkor <= 0 && qtyKg <= 0) throw new Error('Minimal isi Ekor atau Kg (> 0).');
 
+        // Konfirmasi jika berat/ekor di luar standar
+        const bdPackWarn = checkPackRange(itemId, qtyEkor, qtyKg);
+        const bdWarnEl = document.getElementById('bd-pack-warning');
+        if (bdWarnEl) {
+          bdWarnEl.textContent = bdPackWarn || '';
+          bdWarnEl.style.display = bdPackWarn ? '' : 'none';
+        }
+        if (bdPackWarn) {
+          const lanjut = window.confirm(bdPackWarn + '\n\nYakin ingin lanjut?');
+          if (!lanjut) {
+            bdStatus.textContent = 'Dibatalkan. Silakan cek kembali data ekor / kg.';
+            bdStatus.className = 'status error';
+            bdGenerate.disabled = false;
+            return;
+          }
+        }
+
         // RPC: membuat row stok_karung dengan status = draft
         const { data, error } = await sb.rpc('rpc_create_draft_karung', {
           p_item_id: itemId,
@@ -3963,8 +4045,10 @@ if (!itemId) throw new Error('Item wajib dipilih.');
         const karungId = row && row.karung_id ? row.karung_id : null;
         if (!karungId) throw new Error('RPC tidak mengembalikan karung_id.');
 
-        // Ambil item name untuk label
-        const itemName = bdItemSel.options[bdItemSel.selectedIndex]?.textContent || 'ITEM';
+        // Ambil item name & category untuk label
+        const selectedOpt = bdItemSel.options[bdItemSel.selectedIndex];
+        const itemName = selectedOpt?.textContent || 'ITEM';
+        const itemCategory = selectedOpt?.dataset.category || itemCategoryMap[itemId] || '';
         const catatan = '';
 
         bdStatus.textContent = 'Berhasil membuat draft: ' + karungId + '. Membuka jendela print...';
@@ -3976,6 +4060,7 @@ if (!itemId) throw new Error('Item wajib dipilih.');
           tglProduksi,
           totalEkor: qtyEkor,
           totalKg: qtyKg,
+          itemCategory,
           catatan});
 
         // Jika admin mencentang saldo awal, otomatis posting receipt sumber=awal
@@ -4943,6 +5028,7 @@ let tambahBatchInitialized = false;
       const opt = document.createElement('option');
       opt.value = item.item_id;
       opt.textContent = item.item_name;
+      opt.dataset.category = item.item_category || '';
       itemSelect.appendChild(opt);
     });
     if (list.length > 0) {
@@ -4962,6 +5048,8 @@ let tambahBatchInitialized = false;
   function onItemChange() {
     const opt = itemSelect.options[itemSelect.selectedIndex];
     selectedItemIdInp.value = opt ? opt.value : '';
+    // Refresh warning saat item berubah (misal user ganti item setelah isi rak)
+    updateTotals();
   }
 
   function addRakRow(rakName = '') {
@@ -5029,6 +5117,15 @@ let tambahBatchInitialized = false;
     });
     totalEkorSpan.textContent = totalEkor;
     totalKgSpan.textContent = totalKg.toFixed(2);
+
+    // Peringatan range standar (muncul langsung saat input berubah)
+    const itemId = selectedItemIdInp ? selectedItemIdInp.value : '';
+    const warn = checkPackRange(itemId, totalEkor, totalKg);
+    const warnEl = document.getElementById('tk-pack-warning');
+    if (warnEl) {
+      warnEl.textContent = warn || '';
+      warnEl.style.display = warn ? '' : 'none';
+    }
   }
 
   async function handleSavePreview() {
@@ -5120,12 +5217,24 @@ let tambahBatchInitialized = false;
       return;
     }
 
+    // Konfirmasi jika berat/ekor di luar standar
+    const packWarn = checkPackRange(itemId, totalEkor, totalKg);
+    if (packWarn) {
+      const lanjut = window.confirm(packWarn + '\n\nYakin ingin lanjut?');
+      if (!lanjut) {
+        statusMessage.textContent = 'Submit dibatalkan. Silakan cek kembali data ekor / kg.';
+        statusMessage.className = 'status error';
+        return;
+      }
+    }
+
     lastPreviewData = {
       tglAbf,
       batchId,
       shift,
       itemId,
       itemName,
+      itemCategory: itemCategoryMap[itemId] || (itemSelect.selectedOptions[0]?.dataset.category || ''),
       tglProduksi,
       operatorName,
       catatan,
@@ -5317,6 +5426,9 @@ try {
       Number(preview.totalKg || 0).toFixed(2)
     ].join('|');
 
+    // Hitung tanggal expired: Karkas = +1 tahun, lainnya = +6 bulan
+    const expiredDate = calcExpiredDate(preview.tglProduksi || '', preview.itemCategory || '');
+
     const rawMemo = preview?.catatan ?? "";
     const memoStr =
       (typeof rawMemo === "string") ? rawMemo :
@@ -5380,6 +5492,7 @@ try {
       <div class="label-right">
         <div class="label-item-name">${escapeHtml(preview.itemName || '')}</div>
         <div class="label-row"><span class="label-text">Tgl Produksi</span><span>${escapeHtml(preview.tglProduksi || '')}</span></div>
+        <div class="label-row" style="color:#b91c1c; font-weight:700;"><span class="label-text">Tgl Expired</span><span>${escapeHtml(expiredDate)}</span></div>
         <div class="label-row"><span class="label-text">Ekor</span><span>${Number(preview.totalEkor || 0)}</span></div>
         <div class="label-row"><span class="label-text">Kg</span><span>${Number(preview.totalKg || 0).toFixed(2)}</span></div>
         ${memoText ? `<div class="label-memo">${escapeHtml(memoText)}</div>` : ``}
@@ -7248,13 +7361,14 @@ function showDetailKarungForPallet(pallet, rows) {
     if (Array.isArray(items) && items.length > 0) return true;
     const { data: itemData, error: itemError } = await sb
       .from('items')
-      .select('item_id, item_name')
+      .select('item_id, item_name, item_category, std_kg_min, std_kg_max')
       .order('item_name', { ascending: true });
     if (itemError) {
       console.error(itemError);
       return false;
     }
     items = itemData || [];
+    rebuildItemMaps();
     return true;
   }
 
@@ -8923,7 +9037,8 @@ function openPickingSlipWindow(noDoc, header, detail) {
         tglProduksi: (gbTglProduksi.value || ''),
         totalEkor: data.total_ekor,
         totalKg: Number(data.total_kg),
-        catatan: (gbKet.value || '')
+        catatan: (gbKet.value || ''),
+        itemCategory: itemCategoryMap[firstRow?.item_id] || ''
       };
       if (typeof openLabelWindow === 'function') {
         openLabelWindow(data.karung_tujuan_id, preview);
@@ -9011,8 +9126,7 @@ function openPickingSlipWindow(noDoc, header, detail) {
         tglProduksi: h.tgl_produksi || '',
         totalEkor: h.qty_ekor_sisa ?? 0,
         totalKg: Number(h.qty_kg_sisa ?? 0),
-        // optional, jika ingin tampil di label:
-        // catatan: '',
+        itemCategory: itemCategoryMap[h.item_id] || '',
       };
       try { openLabelWindow(h.karung_id, preview); } catch (e) { console.error(e); }
     });
@@ -9535,7 +9649,7 @@ function openPickingSlipWindow(noDoc, header, detail) {
       if (Array.isArray(items) && items.length > 0) return true;
       const { data: itemData, error: itemError } = await sb
         .from('items')
-        .select('item_id, item_name')
+        .select('item_id, item_name, item_category, std_kg_min, std_kg_max')
         .order('item_name', { ascending: true });
 
       if (itemError) {
@@ -9544,6 +9658,7 @@ function openPickingSlipWindow(noDoc, header, detail) {
         return false;
       }
       items = itemData || [];
+      rebuildItemMaps();
       return true;
     }
 
