@@ -380,6 +380,53 @@
       margin-top: 8px;
       white-space: pre-line;
     }
+    /* ===== Flag karung belum terdaftar pallet (Laporan Batch Pembekuan) ===== */
+    .warning-box {
+      background: #fdecea;
+      border: 1px solid #f0a6a0;
+      color: #a02017;
+      border-radius: 4px;
+      padding: 10px 12px;
+      font-size: 13px;
+      margin-top: 4px;
+      margin-bottom: 4px;
+      font-weight: 500;
+    }
+    .warning-box.ok {
+      background: #e8f6ec;
+      border-color: #a3d7b1;
+      color: #0a7a2f;
+    }
+    .flagged-row {
+      background: #fdecea !important;
+    }
+    .flagged-row td {
+      color: #a02017;
+    }
+    .pallet-missing-label {
+      display: inline-block;
+      background: #c1272d;
+      color: #fff;
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-size: 11px;
+      font-weight: bold;
+      letter-spacing: 0.3px;
+    }
+    .status-badge {
+      display: inline-block;
+      padding: 1px 6px;
+      border-radius: 3px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: lowercase;
+    }
+    .status-badge.st-tersedia { background: #e3f2fd; color: #0b4f9c; }
+    .status-badge.st-terbuka  { background: #fff4e5; color: #a66300; }
+    .status-badge.st-habis    { background: #eceff3; color: #555; }
+    .status-badge.st-digabung { background: #f3e8ff; color: #6b21a8; }
+    .status-badge.st-draft    { background: #f5f5f5; color: #777; }
+    .status-badge.st-unknown  { background: #f5f5f5; color: #777; }
     .top-bar {
       display: flex;
       justify-content: space-between;
@@ -2136,7 +2183,14 @@
       <tbody id="lb-tbody-item"></tbody>
     </table>
   <div class="section-title">4. Rincian per Karung</div>
+    <div id="lb-warning-pallet" class="warning-box" style="display:none;"></div>
     <div id="lb-summary-detail" class="totals-box" style="display:none;"></div>
+    <div id="lb-detail-controls" style="display:none; margin: 6px 0; font-size:13px;">
+      <label style="cursor:pointer;">
+        <input type="checkbox" id="lb-filter-flagged-only" />
+        Hanya tampilkan karung yang <strong>belum terdaftar ke pallet</strong>
+      </label>
+    </div>
     <table class="rak-table" id="lb-table-detail" style="margin-top:8px; display:none;">
       <thead>
         <tr>
@@ -2146,6 +2200,8 @@
           <th>Ekor</th>
           <th>Kg</th>
           <th>Tgl Produksi</th>
+          <th>Status</th>
+          <th>Pallet</th>
         </tr>
       </thead>
       <tbody id="lb-tbody-detail"></tbody>
@@ -8055,6 +8111,11 @@ let lssDetailSelected = null; // row object {item_id,item_name,...}
   const lbSummaryDetail = document.getElementById('lb-summary-detail');
   const lbTableDetail   = document.getElementById('lb-table-detail');
   const lbTbodyDetail   = document.getElementById('lb-tbody-detail');
+  const lbWarningPallet    = document.getElementById('lb-warning-pallet');
+  const lbDetailControls   = document.getElementById('lb-detail-controls');
+  const lbFilterFlaggedOnly = document.getElementById('lb-filter-flagged-only');
+  // Simpan hasil rendering detail terakhir supaya filter bisa toggle tanpa query ulang
+  let lbLastDetailList = [];
 
   async function initLaporanBatchOnce() {
     if (laporanBatchInitialized) return;
@@ -8096,6 +8157,10 @@ let lssDetailSelected = null; // row object {item_id,item_name,...}
 
     if (lbBtnTampilkan) {
       lbBtnTampilkan.addEventListener('click', tampilkanLaporanBatch);
+    }
+
+    if (lbFilterFlaggedOnly) {
+      lbFilterFlaggedOnly.addEventListener('change', renderLaporanBatchDetail);
     }
   }
 
@@ -8175,6 +8240,18 @@ let lssDetailSelected = null; // row object {item_id,item_name,...}
     if (lbTbodyDetail) {
       lbTbodyDetail.innerHTML = '';
     }
+    if (lbWarningPallet) {
+      lbWarningPallet.style.display = 'none';
+      lbWarningPallet.textContent = '';
+      lbWarningPallet.classList.remove('ok');
+    }
+    if (lbDetailControls) {
+      lbDetailControls.style.display = 'none';
+    }
+    if (lbFilterFlaggedOnly) {
+      lbFilterFlaggedOnly.checked = false;
+    }
+    lbLastDetailList = [];
   }
 
   async function tampilkanLaporanBatch() {
@@ -8220,10 +8297,10 @@ let lssDetailSelected = null; // row object {item_id,item_name,...}
       return;
     }
 
-    // 2) Ambil daftar karung untuk batch ini
+    // 2) Ambil daftar karung untuk batch ini (sertakan status_karung & pallet_id untuk flag)
     const { data: karungData, error: karungError } = await sb
       .from('stok_karung')
-      .select('karung_id, item_id, tgl_produksi')
+      .select('karung_id, item_id, tgl_produksi, status_karung, pallet_id')
       .eq('batch_pembekuan', batchId);
 
     if (karungError) {
@@ -8306,6 +8383,16 @@ let lssDetailSelected = null; // row object {item_id,item_name,...}
     karungData.forEach(k => {
       if (k.karung_id) {
         karungToTglProduksi[k.karung_id] = k.tgl_produksi || null;
+      }
+    });
+
+    // Map karung -> status & pallet (untuk flag "belum daftar pallet")
+    const karungToStatus = {};
+    const karungToPallet = {};
+    karungData.forEach(k => {
+      if (k.karung_id) {
+        karungToStatus[k.karung_id] = k.status_karung || null;
+        karungToPallet[k.karung_id] = k.pallet_id || null;
       }
     });
 
@@ -8478,78 +8565,180 @@ let lssDetailSelected = null; // row object {item_id,item_name,...}
 
       if (rakFilter !== 'ALL' && rakAbf !== rakFilter) return;
 
+      const statusKarung = karungToStatus[r.karung_id] || null;
+      const palletId     = karungToPallet[r.karung_id] || null;
+      // Flag: status bukan 'habis' dan bukan 'digabung' TAPI pallet_id kosong
+      const isFlagged = !!r.karung_id
+        && statusKarung !== 'habis'
+        && statusKarung !== 'digabung'
+        && (palletId === null || palletId === '' || palletId === undefined);
+
       detailList.push({
         rak_abf: rakAbf,
         karung_id: r.karung_id,
         item_name: itemName,
         qty_ekor: Number(r.qty_ekor) || 0,
         qty_kg: Number(r.qty_kg) || 0,
-        tgl_produksi: karungToTglProduksi[r.karung_id] || null
+        tgl_produksi: karungToTglProduksi[r.karung_id] || null,
+        status_karung: statusKarung,
+        pallet_id: palletId,
+        is_flagged: isFlagged
       });
     });
 
-    // sort: item_name, lalu karung_id
+    // sort: baris bermasalah di atas, lalu item_name, lalu karung_id
     detailList.sort((a, b) => {
+      if (a.is_flagged !== b.is_flagged) return a.is_flagged ? -1 : 1;
       const c = a.item_name.localeCompare(b.item_name);
       if (c !== 0) return c;
       return String(a.karung_id).localeCompare(String(b.karung_id));
     });
 
-    if (detailList.length > 0) {
-      const totalEkorDetail = detailList.reduce((s, x) => s + (x.qty_ekor || 0), 0);
-      const totalKgDetail = detailList.reduce((s, x) => s + (x.qty_kg || 0), 0);
+    // Simpan meta utk renderer (batchId, rakFilter) lewat properti tambahan di array
+    detailList.__batchId   = batchId;
+    detailList.__rakFilter = rakFilter;
+    lbLastDetailList = detailList;
 
-      if (lbSummaryDetail) {
-        lbSummaryDetail.style.display = 'block';
-        const rakLabel = rakFilter === 'ALL' ? 'Semua Rak' : `Rak ${rakFilter}`;
-        lbSummaryDetail.textContent =
-          `Detail Batch ${batchId} - ${rakLabel}. ` +
-          `Total Baris: ${detailList.length.toLocaleString('id-ID')} | ` +
-          `Total Ekor: ${totalEkorDetail.toLocaleString('id-ID')} | ` +
-          `Total Kg: ${totalKgDetail.toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-      }
-
-      if (lbTableDetail && lbTbodyDetail) {
-        lbTableDetail.style.display = 'table';
-        lbTbodyDetail.innerHTML = '';
-
-        detailList.forEach(row => {
-          const tr = document.createElement('tr');
-
-          const tdRak = document.createElement('td');
-          tdRak.textContent = row.rak_abf;
-          tr.appendChild(tdRak);
-
-          const tdKarung = document.createElement('td');
-          tdKarung.textContent = row.karung_id;
-          tr.appendChild(tdKarung);
-
-          const tdItem = document.createElement('td');
-          tdItem.textContent = row.item_name;
-          tr.appendChild(tdItem);
-
-          const tdEkor = document.createElement('td');
-          tdEkor.textContent = (row.qty_ekor || 0).toLocaleString('id-ID');
-          tr.appendChild(tdEkor);
-
-          const tdKg = document.createElement('td');
-          tdKg.textContent = (row.qty_kg || 0).toLocaleString('id-ID', {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2
-          });
-          tr.appendChild(tdKg);
-
-          const tdTgl = document.createElement('td');
-          tdTgl.textContent = row.tgl_produksi ? String(row.tgl_produksi) : '-';
-          tr.appendChild(tdTgl);
-
-          lbTbodyDetail.appendChild(tr);
-        });
-      }
-    }
+    renderLaporanBatchDetail();
 
     lbStatusMessage.textContent = 'Laporan berhasil ditampilkan.';
     lbStatusMessage.className = 'status success';
+  }
+
+  // ===== Renderer terpisah supaya filter toggle bisa re-render tanpa query ulang =====
+  function renderLaporanBatchDetail() {
+    const detailList = Array.isArray(lbLastDetailList) ? lbLastDetailList : [];
+    const batchId   = detailList.__batchId   || '';
+    const rakFilter = detailList.__rakFilter || 'ALL';
+
+    // Hitung karung UNIK yang bermasalah (bukan per-baris, krn 1 karung bisa di beberapa rak)
+    const flaggedKarungSet = new Set();
+    const allKarungSet = new Set();
+    detailList.forEach(r => {
+      if (r.karung_id) {
+        allKarungSet.add(r.karung_id);
+        if (r.is_flagged) flaggedKarungSet.add(r.karung_id);
+      }
+    });
+    const flaggedCount = flaggedKarungSet.size;
+    const totalKarung  = allKarungSet.size;
+
+    // Warning box
+    if (lbWarningPallet) {
+      lbWarningPallet.classList.remove('ok');
+      if (detailList.length === 0) {
+        lbWarningPallet.style.display = 'none';
+        lbWarningPallet.textContent = '';
+      } else if (flaggedCount > 0) {
+        lbWarningPallet.style.display = 'block';
+        lbWarningPallet.textContent =
+          `\u26A0 ${flaggedCount} dari ${totalKarung} karung belum terdaftar ke pallet. ` +
+          `Mohon cek baris yang ditandai merah di bawah.`;
+      } else {
+        lbWarningPallet.style.display = 'block';
+        lbWarningPallet.classList.add('ok');
+        lbWarningPallet.textContent =
+          `\u2713 Semua karung di batch ini sudah terdaftar ke pallet (${totalKarung} karung).`;
+      }
+    }
+
+    // Tampilkan controls kalau ada data
+    if (lbDetailControls) {
+      lbDetailControls.style.display = detailList.length > 0 ? 'block' : 'none';
+    }
+
+    // Terapkan filter "hanya yang bermasalah" bila dicentang
+    const onlyFlagged = !!(lbFilterFlaggedOnly && lbFilterFlaggedOnly.checked);
+    const filteredList = onlyFlagged ? detailList.filter(r => r.is_flagged) : detailList;
+
+    // Summary (hitung dari filteredList agar konsisten dgn yg tampil)
+    const totalEkorDetail = filteredList.reduce((s, x) => s + (x.qty_ekor || 0), 0);
+    const totalKgDetail   = filteredList.reduce((s, x) => s + (x.qty_kg || 0), 0);
+
+    if (lbSummaryDetail) {
+      if (filteredList.length === 0) {
+        lbSummaryDetail.style.display = 'none';
+        lbSummaryDetail.textContent = '';
+      } else {
+        lbSummaryDetail.style.display = 'block';
+        const rakLabel = rakFilter === 'ALL' ? 'Semua Rak' : `Rak ${rakFilter}`;
+        const filterNote = onlyFlagged ? ' [FILTER: hanya karung belum daftar pallet]' : '';
+        lbSummaryDetail.textContent =
+          `Detail Batch ${batchId} - ${rakLabel}${filterNote}. ` +
+          `Total Baris: ${filteredList.length.toLocaleString('id-ID')} | ` +
+          `Total Ekor: ${totalEkorDetail.toLocaleString('id-ID')} | ` +
+          `Total Kg: ${totalKgDetail.toLocaleString('id-ID', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      }
+    }
+
+    if (!lbTableDetail || !lbTbodyDetail) return;
+
+    if (filteredList.length === 0) {
+      lbTableDetail.style.display = 'none';
+      lbTbodyDetail.innerHTML = '';
+      return;
+    }
+
+    lbTableDetail.style.display = 'table';
+    lbTbodyDetail.innerHTML = '';
+
+    filteredList.forEach(row => {
+      const tr = document.createElement('tr');
+      if (row.is_flagged) tr.classList.add('flagged-row');
+
+      const tdRak = document.createElement('td');
+      tdRak.textContent = row.rak_abf;
+      tr.appendChild(tdRak);
+
+      const tdKarung = document.createElement('td');
+      tdKarung.textContent = row.karung_id;
+      tr.appendChild(tdKarung);
+
+      const tdItem = document.createElement('td');
+      tdItem.textContent = row.item_name;
+      tr.appendChild(tdItem);
+
+      const tdEkor = document.createElement('td');
+      tdEkor.textContent = (row.qty_ekor || 0).toLocaleString('id-ID');
+      tr.appendChild(tdEkor);
+
+      const tdKg = document.createElement('td');
+      tdKg.textContent = (row.qty_kg || 0).toLocaleString('id-ID', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+      });
+      tr.appendChild(tdKg);
+
+      const tdTgl = document.createElement('td');
+      tdTgl.textContent = row.tgl_produksi ? String(row.tgl_produksi) : '-';
+      tr.appendChild(tdTgl);
+
+      const tdStatus = document.createElement('td');
+      if (row.status_karung) {
+        const badge = document.createElement('span');
+        const s = String(row.status_karung).toLowerCase();
+        const known = ['tersedia','terbuka','habis','digabung','draft'];
+        badge.className = 'status-badge st-' + (known.includes(s) ? s : 'unknown');
+        badge.textContent = s;
+        tdStatus.appendChild(badge);
+      } else {
+        tdStatus.textContent = '-';
+      }
+      tr.appendChild(tdStatus);
+
+      const tdPallet = document.createElement('td');
+      if (row.is_flagged) {
+        const lbl = document.createElement('span');
+        lbl.className = 'pallet-missing-label';
+        lbl.textContent = 'BELUM DIDAFTARKAN';
+        tdPallet.appendChild(lbl);
+      } else {
+        tdPallet.textContent = row.pallet_id || '-';
+      }
+      tr.appendChild(tdPallet);
+
+      lbTbodyDetail.appendChild(tr);
+    });
   }
 function openPickingSlipWindow(noDoc, header, detail) {
   // --- 1) REKAP PER ITEM UNTUK LEMBAR 1 ---
