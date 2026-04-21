@@ -521,6 +521,7 @@
 	      <button class="menu-btn" data-page="laporan-batch">Laporan Batch Pembekuan</button>
         <button class="menu-btn" data-page="laporan-mutasi">Laporan Mutasi / Log Karung</button>
         <button class="menu-btn" data-page="laporan-reprocess">Laporan Rekapan Reprocess</button>
+        <button class="menu-btn" data-page="laporan-harian-user">Laporan Harian User</button>
       </aside>
 
       <!-- MAIN CONTENT -->
@@ -2289,8 +2290,156 @@
             </div>
           </div>
         </div>
+
+<div id="page-laporan-harian-user" style="display:none;">
+  <div class="container">
+    <div class="top-bar">
+      <div><strong>Laporan Harian User</strong></div>
+      <div><span id="lhu-userInfo"></span></div>
+    </div>
+
+    <div class="section-title">1. Filter</div>
+    <div class="field-row">
+      <div class="field">
+        <label for="lhu-operator-select">Operator</label>
+        <select id="lhu-operator-select">
+          <option value="">-- Pilih operator --</option>
+        </select>
+        <div class="small-note">Nama operator yang dicatat di log transaksi.</div>
+      </div>
+      <div class="field" style="flex:0 0 180px;">
+        <label for="lhu-tgl">Tanggal</label>
+        <input type="date" id="lhu-tgl" />
+      </div>
+      <div class="field" style="flex:0 0 160px;">
+        <label>&nbsp;</label>
+        <button type="button" class="btn btn-primary btn-small" id="lhu-btn-tampilkan">
+          Tampilkan Laporan
+        </button>
+      </div>
+    </div>
+
+    <div id="lhu-status" class="status"></div>
+
+    <div class="section-title">2. Aktivitas Panen ABF</div>
+    <div id="lhu-summary-panen" class="totals-box" style="display:none;"></div>
+    <table class="rak-table" id="lhu-table-panen" style="display:none; margin-top:8px;">
+      <thead>
+        <tr>
+          <th>Karung ID</th>
+          <th>Rak ABF</th>
+          <th>Item</th>
+          <th>Ekor</th>
+          <th>Kg</th>
+          <th>Waktu</th>
+          <th>Status Karung</th>
+          <th>Pallet</th>
+        </tr>
+      </thead>
+      <tbody id="lhu-tbody-panen"></tbody>
+    </table>
+    <div id="lhu-empty-panen" class="small-note" style="display:none; margin-top:6px;">Tidak ada aktivitas panen ABF pada tanggal ini.</div>
+
+    <div class="section-title">3. Aktivitas Gabung Karung</div>
+    <div id="lhu-summary-gabung" class="totals-box" style="display:none;"></div>
+    <table class="rak-table" id="lhu-table-gabung" style="display:none; margin-top:8px;">
+      <thead>
+        <tr>
+          <th>Karung ID</th>
+          <th>Item</th>
+          <th>Ekor</th>
+          <th>Kg</th>
+          <th>Waktu</th>
+          <th>Status Karung</th>
+          <th>Pallet</th>
+        </tr>
+      </thead>
+      <tbody id="lhu-tbody-gabung"></tbody>
+    </table>
+    <div id="lhu-empty-gabung" class="small-note" style="display:none; margin-top:6px;">Tidak ada aktivitas gabung karung pada tanggal ini.</div>
+
+    <div class="section-title">4. Ringkasan Status Pallet</div>
+    <div id="lhu-summary-pallet" class="totals-box" style="display:none;"></div>
+  </div>
+</div>
+
       </main>
     </div>
+  </div>
+</div>
+
+<div id="page-laporan-harian-user-displaced" style="display:none;">
+  <div class="container">
+    <div class="top-bar">
+      <div><strong>Laporan Harian User</strong></div>
+      <div><span id="lhu-userInfo"></span></div>
+    </div>
+
+    <div class="section-title">1. Filter</div>
+    <div class="field-row">
+      <div class="field">
+        <label for="lhu-operator-select">Operator</label>
+        <select id="lhu-operator-select">
+          <option value="">-- Pilih operator --</option>
+        </select>
+        <div class="small-note">Nama operator yang dicatat di log transaksi.</div>
+      </div>
+      <div class="field" style="flex:0 0 180px;">
+        <label for="lhu-tgl">Tanggal</label>
+        <input type="date" id="lhu-tgl" />
+      </div>
+      <div class="field" style="flex:0 0 160px;">
+        <label>&nbsp;</label>
+        <button type="button" class="btn btn-primary btn-small" id="lhu-btn-tampilkan">
+          Tampilkan Laporan
+        </button>
+      </div>
+    </div>
+
+    <div id="lhu-status" class="status"></div>
+
+    <!-- Section Panen ABF -->
+    <div class="section-title">2. Aktivitas Panen ABF</div>
+    <div id="lhu-summary-panen" class="totals-box" style="display:none;"></div>
+    <table class="rak-table" id="lhu-table-panen" style="display:none; margin-top:8px;">
+      <thead>
+        <tr>
+          <th>Karung ID</th>
+          <th>Rak ABF</th>
+          <th>Item</th>
+          <th>Ekor</th>
+          <th>Kg</th>
+          <th>Waktu</th>
+          <th>Status Karung</th>
+          <th>Pallet</th>
+        </tr>
+      </thead>
+      <tbody id="lhu-tbody-panen"></tbody>
+    </table>
+    <div id="lhu-empty-panen" class="small-note" style="display:none; margin-top:6px;">Tidak ada aktivitas panen ABF pada tanggal ini.</div>
+
+    <!-- Section Gabung Karung -->
+    <div class="section-title">3. Aktivitas Gabung Karung</div>
+    <div id="lhu-summary-gabung" class="totals-box" style="display:none;"></div>
+    <table class="rak-table" id="lhu-table-gabung" style="display:none; margin-top:8px;">
+      <thead>
+        <tr>
+          <th>Karung ID</th>
+          <th>Item</th>
+          <th>Ekor</th>
+          <th>Kg</th>
+          <th>Waktu</th>
+          <th>Status Karung</th>
+          <th>Pallet</th>
+        </tr>
+      </thead>
+      <tbody id="lhu-tbody-gabung"></tbody>
+    </table>
+    <div id="lhu-empty-gabung" class="small-note" style="display:none; margin-top:6px;">Tidak ada aktivitas gabung karung pada tanggal ini.</div>
+
+    <!-- Section Ringkasan Pallet -->
+    <div class="section-title">4. Ringkasan Status Pallet</div>
+    <div id="lhu-summary-pallet" class="totals-box" style="display:none;"></div>
   </div>
 </div>
 
@@ -2381,6 +2530,7 @@
   const pageLaporanStokSemua  = document.getElementById('page-laporan-stok-semua');
   const pageLaporanMutasi     = document.getElementById('page-laporan-mutasi');
   const pageLaporanReprocess  = document.getElementById('page-laporan-reprocess');
+  const pageLaporanHarianUser = document.getElementById('page-laporan-harian-user');
   const pageFormTambahBatch = document.getElementById('page-form-tambah-batch');
   const pageFormTambahItem  = document.getElementById('page-form-tambah-item');
 
@@ -2399,6 +2549,7 @@
   let pickingSlipInitialized = false;
 let riwayatPickingSlipInitialized = false;
 let riwayatReceiptSlipInitialized = false;
+let laporanHarianUserInitialized = false;
 
 // ===== Riwayat Picking Slip (Print Ulang saja) — Global Safe Implementation =====
 // Catatan: implementasi ini sengaja berdiri sendiri agar tidak bergantung pada block-scope lain.
@@ -3494,6 +3645,9 @@ async function initRiwayatReceiptSlipOnce() {
       if (page === 'laporan-reprocess') {
         await initLaporanReprocessOnce();
       }
+      if (page === 'laporan-harian-user') {
+        await initLaporanHarianUserOnce();
+      }
 if (window.innerWidth <= 768) {
         appShellEl.classList.add('mobile-sidebar-collapsed');
       }
@@ -3534,6 +3688,7 @@ if (window.innerWidth <= 768) {
     setPageVisible(pageLaporanStokSemua, (page === 'laporan-stok-semua'));
     setPageVisible(pageLaporanMutasi,    (page === 'laporan-mutasi'));
     setPageVisible(pageLaporanReprocess,(page === 'laporan-reprocess'));
+    setPageVisible(pageLaporanHarianUser,(page === 'laporan-harian-user'));
   }
 
 
@@ -10114,6 +10269,307 @@ function openPickingSlipWindow(noDoc, header, detail) {
     setStatus('Form Revisi siap. Masukkan karung_id untuk mulai.', '');
   }
 
+
+  // ===== LAPORAN HARIAN USER =====
+  async function initLaporanHarianUserOnce() {
+    if (laporanHarianUserInitialized) return;
+    laporanHarianUserInitialized = true;
+
+    const lhuUserInfoEl      = document.getElementById('lhu-userInfo');
+    const lhuOperatorSelect  = document.getElementById('lhu-operator-select');
+    const lhuTglInput        = document.getElementById('lhu-tgl');
+    const lhuBtnTampilkan    = document.getElementById('lhu-btn-tampilkan');
+    const lhuStatusEl        = document.getElementById('lhu-status');
+    const lhuSummaryPanen    = document.getElementById('lhu-summary-panen');
+    const lhuTablePanen      = document.getElementById('lhu-table-panen');
+    const lhuTbodyPanen      = document.getElementById('lhu-tbody-panen');
+    const lhuEmptyPanen      = document.getElementById('lhu-empty-panen');
+    const lhuSummaryGabung   = document.getElementById('lhu-summary-gabung');
+    const lhuTableGabung     = document.getElementById('lhu-table-gabung');
+    const lhuTbodyGabung     = document.getElementById('lhu-tbody-gabung');
+    const lhuEmptyGabung     = document.getElementById('lhu-empty-gabung');
+    const lhuSummaryPallet   = document.getElementById('lhu-summary-pallet');
+
+    // Tampilkan info user yang sedang login
+    if (lhuUserInfoEl && operatorDisplayName) {
+      const r = currentProfile && currentProfile.role ? currentProfile.role : 'operator';
+      lhuUserInfoEl.textContent = operatorDisplayName + (r ? ` (${r})` : '');
+    }
+
+    // Default tanggal = hari ini
+    if (lhuTglInput && !lhuTglInput.value) {
+      lhuTglInput.value = new Date().toISOString().slice(0, 10);
+    }
+
+    // Tentukan role user yang sedang login
+    const currentRole = String((currentProfile && currentProfile.role) ? currentProfile.role : 'operator').toLowerCase();
+    const isAdmin = (currentRole === 'admin' || currentRole === 'supervisor');
+
+    // Isi dropdown operator:
+    // - Admin/supervisor: gabungkan dari profiles (full_name resmi) + log_karung (fallback)
+    // - Operator biasa: hanya tampilkan dirinya sendiri
+    if (isAdmin) {
+      // Ambil dari profiles (jika migration RLS sudah dijalankan → dapat semua user;
+      // jika belum → hanya dapat row sendiri, tapi tetap berguna sebagai sumber full_name)
+      const { data: profileData } = await sb
+        .from('profiles')
+        .select('full_name')
+        .eq('is_active', true)
+        .order('full_name', { ascending: true });
+
+      // Ambil distinct operator dari log_karung (open RLS, pasti bisa)
+      const { data: opData, error: opError } = await sb
+        .from('log_karung')
+        .select('operator')
+        .not('operator', 'is', null);
+
+      if (opError) {
+        console.error(opError);
+        setLhuStatus('Gagal memuat daftar operator: ' + opError.message, 'error');
+        return;
+      }
+
+      // Kumpulkan full_name dari profiles (sumber terpercaya)
+      const profileNames = new Set((profileData || []).map(p => p.full_name).filter(Boolean));
+      // Kumpulkan operator dari log_karung
+      const logOpNames  = new Set((opData || []).map(o => o.operator).filter(Boolean));
+
+      // Gabungkan: profiles dulu (nama resmi), tambahkan dari log yang belum ada di profiles
+      const combined = [...profileNames];
+      logOpNames.forEach(name => { if (!profileNames.has(name)) combined.push(name); });
+      combined.sort((a, b) => a.localeCompare(b));
+
+      combined.forEach(name => {
+        const opt = document.createElement('option');
+        opt.value = name;
+        opt.textContent = name;
+        lhuOperatorSelect.appendChild(opt);
+      });
+    } else {
+      // Non-admin: hanya dirinya sendiri, langsung terpilih
+      if (operatorDisplayName) {
+        const opt = document.createElement('option');
+        opt.value = operatorDisplayName;
+        opt.textContent = operatorDisplayName;
+        lhuOperatorSelect.appendChild(opt);
+        lhuOperatorSelect.value = operatorDisplayName;
+      }
+      const note = lhuOperatorSelect.closest('.field').querySelector('.small-note');
+      if (note) note.textContent = 'Anda hanya dapat melihat laporan Anda sendiri.';
+    }
+
+    if (lhuBtnTampilkan) {
+      lhuBtnTampilkan.addEventListener('click', tampilkanLaporanHarianUser);
+    }
+
+    function setLhuStatus(msg, type) {
+      if (!lhuStatusEl) return;
+      lhuStatusEl.textContent = msg;
+      lhuStatusEl.className = 'status' + (type ? ' ' + type : '');
+    }
+
+    function resetLhu() {
+      lhuSummaryPanen.style.display  = 'none';  lhuSummaryPanen.innerHTML  = '';
+      lhuTablePanen.style.display    = 'none';  lhuTbodyPanen.innerHTML    = '';
+      lhuEmptyPanen.style.display    = 'none';
+      lhuSummaryGabung.style.display = 'none';  lhuSummaryGabung.innerHTML = '';
+      lhuTableGabung.style.display   = 'none';  lhuTbodyGabung.innerHTML   = '';
+      lhuEmptyGabung.style.display   = 'none';
+      lhuSummaryPallet.style.display = 'none';  lhuSummaryPallet.innerHTML = '';
+    }
+
+    async function tampilkanLaporanHarianUser() {
+      const operator = lhuOperatorSelect ? lhuOperatorSelect.value.trim() : '';
+      const tgl      = lhuTglInput ? lhuTglInput.value : '';
+
+      if (!operator) { setLhuStatus('Pilih operator terlebih dahulu.', 'error'); return; }
+      if (!tgl)      { setLhuStatus('Pilih tanggal terlebih dahulu.', 'error'); return; }
+
+      resetLhu();
+      setLhuStatus('Mengambil data…', '');
+
+      // Rentang waktu sehari penuh dalam WIB (UTC+7)
+      const dateFrom = tgl + 'T00:00:00+07:00';
+      const dateTo   = tgl + 'T23:59:59+07:00';
+
+      // 1) Ambil log_karung: tipe abf dan gabungan milik operator ini pada hari terpilih
+      const { data: logData, error: logError } = await sb
+        .from('log_karung')
+        .select('log_id, waktu_log, karung_id, perubahan_ekor, perubahan_kg, jenis_perubahan, operator')
+        .eq('operator', operator)
+        .in('jenis_perubahan', ['abf', 'gabungan'])
+        .gte('waktu_log', dateFrom)
+        .lte('waktu_log', dateTo)
+        .order('waktu_log', { ascending: true });
+
+      if (logError) {
+        console.error(logError);
+        setLhuStatus('Gagal mengambil data log: ' + logError.message, 'error');
+        return;
+      }
+
+      const panenLogs  = (logData || []).filter(l => l.jenis_perubahan === 'abf');
+      const gabungLogs = (logData || []).filter(l => l.jenis_perubahan === 'gabungan');
+      const allKarungIds  = [...new Set((logData || []).map(l => l.karung_id))];
+      const panenKarungIds = [...new Set(panenLogs.map(l => l.karung_id))];
+
+      if (logData.length === 0) {
+        setLhuStatus(`Tidak ada aktivitas panen atau gabung karung untuk ${operator} pada ${tgl}.`, '');
+        lhuEmptyPanen.style.display  = 'block';
+        lhuEmptyGabung.style.display = 'block';
+        return;
+      }
+
+      // 2) Ambil stok_karung untuk semua karung (info pallet & item & status)
+      let stokMap = {};
+      if (allKarungIds.length > 0) {
+        const { data: stokData, error: stokError } = await sb
+          .from('stok_karung')
+          .select('karung_id, item_id, pallet_id, status_karung')
+          .in('karung_id', allKarungIds);
+        if (stokError) console.error('stok_karung error:', stokError);
+        (stokData || []).forEach(s => { stokMap[s.karung_id] = s; });
+      }
+
+      // 3) Ambil karung_rak_abf untuk karung panen (info rak)
+      let rakMap = {}; // karung_id -> rak_abf[]
+      if (panenKarungIds.length > 0) {
+        const { data: rakData, error: rakError } = await sb
+          .from('karung_rak_abf')
+          .select('karung_id, rak_abf')
+          .in('karung_id', panenKarungIds);
+        if (rakError) console.error('karung_rak_abf error:', rakError);
+        (rakData || []).forEach(r => {
+          if (!rakMap[r.karung_id]) rakMap[r.karung_id] = [];
+          if (!rakMap[r.karung_id].includes(r.rak_abf)) rakMap[r.karung_id].push(r.rak_abf);
+        });
+      }
+
+      // 4) Ambil item names
+      const itemIds = [...new Set(Object.values(stokMap).map(s => s.item_id).filter(Boolean))];
+      let itemNameMap = {};
+      if (itemIds.length > 0) {
+        const { data: itemData } = await sb
+          .from('items')
+          .select('item_id, item_name')
+          .in('item_id', itemIds);
+        (itemData || []).forEach(it => { itemNameMap[it.item_id] = it.item_name || it.item_id; });
+      }
+      const getItemName = (id) => itemNameMap[id] || id || '-';
+
+      function fmtWaktu(ts) {
+        if (!ts) return '-';
+        try {
+          return new Date(ts).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+        } catch(e) { return ts; }
+      }
+
+      // Hanya status ini yang wajib terdaftar ke pallet
+      function perluPallet(status) {
+        return status === 'tersedia' || status === 'terbuka';
+      }
+
+      function palletBadge(palletId, statusKarung) {
+        if (palletId) {
+          return `<span style="color:#16a34a;font-weight:600;">✅ ${palletId}</span>`;
+        }
+        if (perluPallet(statusKarung)) {
+          return `<span style="color:#dc2626;font-weight:600;">⚠️ Belum</span>`;
+        }
+        // Status digabung / habis / draft → tidak perlu pallet
+        return `<span style="color:#6b7280;">— (${statusKarung || '-'})</span>`;
+      }
+
+      // ===== RENDER PANEN ABF =====
+      const distinctRaks = new Set();
+      panenLogs.forEach(l => (rakMap[l.karung_id] || []).forEach(r => distinctRaks.add(r)));
+      const totalEkorPanen = panenLogs.reduce((s, l) => s + Math.abs(l.perubahan_ekor || 0), 0);
+      const totalKgPanen   = panenLogs.reduce((s, l) => s + Math.abs(parseFloat(l.perubahan_kg || 0)), 0);
+
+      lhuSummaryPanen.innerHTML =
+        `Karung dipanen: <strong>${panenLogs.length}</strong> &nbsp;|&nbsp; ` +
+        `Rak digunakan: <strong>${distinctRaks.size}</strong> (${[...distinctRaks].sort().join(', ') || '-'}) &nbsp;|&nbsp; ` +
+        `Total: <strong>${totalEkorPanen} ekor</strong> / <strong>${totalKgPanen.toFixed(2)} kg</strong>`;
+      lhuSummaryPanen.style.display = 'block';
+
+      if (panenLogs.length > 0) {
+        panenLogs.forEach(l => {
+          const stok = stokMap[l.karung_id] || {};
+          const rak  = (rakMap[l.karung_id] || []).sort().join(', ') || '-';
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td><strong>${l.karung_id}</strong></td>
+            <td>${rak}</td>
+            <td>${getItemName(stok.item_id)}</td>
+            <td style="text-align:right;">${Math.abs(l.perubahan_ekor || 0)}</td>
+            <td style="text-align:right;">${Math.abs(parseFloat(l.perubahan_kg || 0)).toFixed(2)}</td>
+            <td>${fmtWaktu(l.waktu_log)}</td>
+            <td>${stok.status_karung || '-'}</td>
+            <td>${palletBadge(stok.pallet_id, stok.status_karung)}</td>
+          `;
+          lhuTbodyPanen.appendChild(tr);
+        });
+        lhuTablePanen.style.display = '';
+      } else {
+        lhuEmptyPanen.style.display = 'block';
+      }
+
+      // ===== RENDER GABUNG KARUNG =====
+      const totalEkorGabung = gabungLogs.reduce((s, l) => s + Math.abs(l.perubahan_ekor || 0), 0);
+      const totalKgGabung   = gabungLogs.reduce((s, l) => s + Math.abs(parseFloat(l.perubahan_kg || 0)), 0);
+
+      lhuSummaryGabung.innerHTML =
+        `Karung gabungan dibuat: <strong>${gabungLogs.length}</strong> &nbsp;|&nbsp; ` +
+        `Total: <strong>${totalEkorGabung} ekor</strong> / <strong>${totalKgGabung.toFixed(2)} kg</strong>`;
+      lhuSummaryGabung.style.display = 'block';
+
+      if (gabungLogs.length > 0) {
+        gabungLogs.forEach(l => {
+          const stok = stokMap[l.karung_id] || {};
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td><strong>${l.karung_id}</strong></td>
+            <td>${getItemName(stok.item_id)}</td>
+            <td style="text-align:right;">${Math.abs(l.perubahan_ekor || 0)}</td>
+            <td style="text-align:right;">${Math.abs(parseFloat(l.perubahan_kg || 0)).toFixed(2)}</td>
+            <td>${fmtWaktu(l.waktu_log)}</td>
+            <td>${stok.status_karung || '-'}</td>
+            <td>${palletBadge(stok.pallet_id, stok.status_karung)}</td>
+          `;
+          lhuTbodyGabung.appendChild(tr);
+        });
+        lhuTableGabung.style.display = '';
+      } else {
+        lhuEmptyGabung.style.display = 'block';
+      }
+
+      // ===== RINGKASAN PALLET =====
+      const allLogs = [...panenLogs, ...gabungLogs];
+
+      // Hanya karung yang wajib pallet (tersedia / terbuka) yang dihitung
+      const wajibPallet   = allLogs.filter(l => perluPallet((stokMap[l.karung_id] || {}).status_karung));
+      const tidakPerlu    = allLogs.length - wajibPallet.length;
+      const sudahPallet   = wajibPallet.filter(l => stokMap[l.karung_id] && stokMap[l.karung_id].pallet_id).length;
+      const belumPallet   = wajibPallet.length - sudahPallet;
+      const allOk         = belumPallet === 0;
+
+      lhuSummaryPallet.innerHTML =
+        `Total karung (panen + gabungan): <strong>${allLogs.length}</strong>` +
+        (tidakPerlu > 0 ? ` &nbsp;|&nbsp; Tidak perlu pallet (digabung/habis/draft): <strong>${tidakPerlu}</strong>` : '') +
+        `<br>` +
+        `<span style="color:#16a34a;">✅ Wajib pallet & sudah terdaftar: <strong>${sudahPallet}</strong></span><br>` +
+        (allOk
+          ? `<span style="color:#16a34a;font-weight:600;">🎉 Semua karung yang wajib sudah terdaftar ke pallet!</span>`
+          : `<span style="color:#dc2626;font-weight:600;">⚠️ Wajib pallet tapi belum terdaftar: <strong>${belumPallet}</strong> karung — harap segera input ke pallet.</span>`
+        );
+      lhuSummaryPallet.style.display = 'block';
+
+      setLhuStatus(
+        `Laporan berhasil dimuat: ${operator} — ${tgl}`,
+        'success'
+      );
+    }
+  }
 
 
 </script>
