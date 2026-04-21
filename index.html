@@ -783,7 +783,7 @@
                 </div>
                 <div class="field">
                   <label for="bd-kg">Kg</label>
-                  <input type="number" id="bd-kg" inputmode="decimal" min="0" step="0.01" placeholder="0.00">
+                  <input type="number" id="bd-kg" inputmode="decimal" min="0" step="0.1" placeholder="0.0">
                 </div>
               </div>
 
@@ -867,7 +867,7 @@
                 </div>
                 <div class="field">
                   <label for="rv-kg">Kg</label>
-                  <input type="number" id="rv-kg" inputmode="decimal" min="0" step="0.01" placeholder="0.00" />
+                  <input type="number" id="rv-kg" inputmode="decimal" min="0" step="0.1" placeholder="0.0" />
                 </div>
               </div>
 
@@ -4251,7 +4251,7 @@ bdStatus.textContent = 'Form dikosongkan.';
         <td><code>${escapeHtml(l.karung_id_input || '')}</code></td>
         <td>${escapeHtml(l.item_name || '')}</td>
         <td><input type="number" min="0" step="1" value="${l.qty_ekor ?? ''}" data-line-id="${l.line_id}" data-field="qty_ekor" class="rs-edit" style="width:80px;"></td>
-        <td><input type="number" min="0" step="0.01" value="${l.qty_kg ?? ''}" data-line-id="${l.line_id}" data-field="qty_kg" class="rs-edit" style="width:95px;"></td>
+        <td><input type="number" min="0" step="0.1" value="${l.qty_kg ?? ''}" data-line-id="${l.line_id}" data-field="qty_kg" class="rs-edit" style="width:95px;"></td>
         <td>${escapeHtml(l.tgl_produksi || '')}</td>
         <td><button class="btn-small btn-ghost rs-remove" data-line-id="${l.line_id}">Hapus</button></td>
       `;
@@ -5151,9 +5151,13 @@ let tambahBatchInitialized = false;
     const tdKg = document.createElement('td');
     const inputKg = document.createElement('input');
     inputKg.type = 'number';
-    inputKg.min = '0.01';
-    inputKg.step = '0.01';
-    inputKg.oninput = updateTotals;
+    inputKg.min = '0.1';
+    inputKg.step = '0.1';
+    inputKg.oninput = function() {
+      const raw = parseFloat(this.value || '0');
+      if (!isNaN(raw)) this.value = Math.round(raw * 10) / 10;
+      updateTotals();
+    };
     tdKg.appendChild(inputKg);
 
     const tdAksi = document.createElement('td');
@@ -7010,12 +7014,13 @@ function psBeep(kind) {
       const inputKg = document.createElement('input');
       inputKg.type = 'number';
       inputKg.min = '0';
-      inputKg.step = '0.01';
+      inputKg.step = '0.1';
       inputKg.value = row.qty_kg_keluar;
       inputKg.className = 'input-number';
       inputKg.addEventListener('change', () => {
         let val = parseFloat(inputKg.value || '0');
         if (isNaN(val) || val < 0) val = 0;
+        val = Math.round(val * 10) / 10;
         if (val > row.qty_kg_sisa) val = row.qty_kg_sisa;
         row.qty_kg_keluar = val;
         psRenderDetailTable();
@@ -9152,7 +9157,7 @@ function openPickingSlipWindow(noDoc, header, detail) {
         <td>${row.item_name || '-'}</td>
         <td>${row.sisa_ekor} / ${row.sisa_kg.toFixed(2)}</td>
         <td><input type="number" min="0" step="1" style="width:90px" /></td>
-        <td><input type="number" min="0" step="0.01" style="width:110px" /></td>
+        <td><input type="number" min="0" step="0.1" style="width:110px" /></td>
         <td><button class="btn btn-ghost btn-small">Hapus</button></td>
       `;
 
@@ -9172,8 +9177,9 @@ function openPickingSlipWindow(noDoc, header, detail) {
         gbRecalcTotal();
       });
       inpKg.addEventListener('input', () => {
-        const v = parseFloat(inpKg.value || '0');
-        row.pindah_kg = isNaN(v) ? 0 : v;
+        const raw = parseFloat(inpKg.value || '0');
+        const v = isNaN(raw) ? 0 : Math.round(raw * 10) / 10;
+        row.pindah_kg = v;
         gbRecalcTotal();
       });
       btnDel.addEventListener('click', () => {
