@@ -5309,8 +5309,11 @@ let tambahBatchInitialized = false;
     inputKg.min = '0.1';
     inputKg.step = '0.1';
     inputKg.oninput = function() {
+      updateTotals();
+    };
+    inputKg.onblur = function() {
       const raw = parseFloat(this.value || '0');
-      if (!isNaN(raw)) this.value = Math.round(raw * 10) / 10;
+      if (!isNaN(raw) && this.value !== '') this.value = Math.round(raw * 10) / 10;
       updateTotals();
     };
     tdKg.appendChild(inputKg);
