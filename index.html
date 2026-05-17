@@ -5,10 +5,10 @@
   <title>WMS Kurnia's Food - Supabase</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
-  <!-- Supabase JS v2 -->
-  <script src="https://unpkg.com/@sb/sb-js@2"></script>
   <!-- QR Scanner (kamera HP) -->
   <script src="https://unpkg.com/html5-qrcode"></script>
+  <!-- SheetJS untuk Export Excel -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 
   <style>
     :root {
@@ -425,8 +425,10 @@
     .status-badge.st-terbuka  { background: #fff4e5; color: #a66300; }
     .status-badge.st-habis    { background: #eceff3; color: #555; }
     .status-badge.st-digabung { background: #f3e8ff; color: #6b21a8; }
-    .status-badge.st-draft    { background: #f5f5f5; color: #777; }
-    .status-badge.st-unknown  { background: #f5f5f5; color: #777; }
+    .status-badge.st-draft     { background: #fffbe6; color: #ad6800; border: 1px solid #ffe58f; }
+    .status-badge.st-posted    { background: #f6ffed; color: #237804; border: 1px solid #b7eb8f; }
+    .status-badge.st-cancelled { background: #fff1f0; color: #a8071a; border: 1px solid #ffa39e; }
+    .status-badge.st-unknown   { background: #f5f5f5; color: #777; }
     .top-bar {
       display: flex;
       justify-content: space-between;
@@ -448,6 +450,153 @@
       #tb-rak-mapping .rack-card{flex-direction:column;align-items:stretch;}
       #tb-rak-mapping .rack-card select{width:100%;}
     }
+
+    /* ═══════════════════════════════════════════════
+       REVISI PICKING SLIP — shared helpers
+    ═══════════════════════════════════════════════ */
+    /* Spinner */
+    .spinner {
+      display: inline-block; width: 14px; height: 14px;
+      border: 2px solid #ccc; border-top-color: #5b6ef5;
+      border-radius: 50%; animation: rvps-spin .7s linear infinite;
+      vertical-align: middle; margin-right: 6px;
+    }
+    @keyframes rvps-spin { to { transform: rotate(360deg); } }
+
+    /* Modal overlay */
+    .rvps-modal-overlay {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,.45); z-index: 900;
+      align-items: center; justify-content: center;
+    }
+    .rvps-modal-overlay.active { display: flex; }
+    .rvps-modal-box {
+      background: #fff; border-radius: 12px; padding: 28px 32px;
+      max-width: 480px; width: 95%; box-shadow: 0 8px 32px rgba(0,0,0,.2);
+    }
+    .rvps-modal-box h3 { font-size: 16px; margin-bottom: 6px; }
+    .rvps-modal-box .rvps-modal-sub { font-size: 12px; color: #777; margin-bottom: 18px; }
+    .rvps-confirm-box {
+      background: #fff; border-radius: 12px; padding: 28px 32px;
+      max-width: 440px; width: 95%; box-shadow: 0 8px 32px rgba(0,0,0,.2);
+    }
+    .rvps-confirm-box h3 { font-size: 16px; margin-bottom: 10px; }
+    .rvps-confirm-box p  { font-size: 13px; color: #555; margin-bottom: 20px; line-height: 1.6; }
+
+    /* Status message (distinct from existing .status) */
+    .rvps-msg {
+      padding: 10px 14px; border-radius: 7px; font-size: 13px;
+      margin-top: 10px; display: none;
+    }
+    .rvps-msg.info    { background: #e3f2fd; color: #1565c0; display: block; }
+    .rvps-msg.success { background: #e8f5e9; color: #2e7d32; display: block; }
+    .rvps-msg.error   { background: #ffebee; color: #c62828; display: block; }
+    .rvps-msg.warning { background: #fff8e1; color: #7b5800; display: block; }
+
+    /* Revisi page layout */
+    #page-revisi-picking-slip .rvps-card {
+      background: #fff; border-radius: 10px;
+      box-shadow: 0 1px 6px rgba(0,0,0,.07);
+      padding: 20px 24px; margin-bottom: 18px;
+    }
+    #page-revisi-picking-slip .rvps-card-title {
+      font-size: 11px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .7px; color: #888; margin-bottom: 14px;
+    }
+    #page-revisi-picking-slip .rvps-search-row {
+      display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end;
+    }
+    #page-revisi-picking-slip .rvps-search-row .rvps-field {
+      display: flex; flex-direction: column; gap: 4px;
+    }
+    #page-revisi-picking-slip .rvps-search-row label {
+      font-size: 11px; font-weight: 600; color: #555;
+    }
+    #page-revisi-picking-slip .rvps-search-row input,
+    #page-revisi-picking-slip .rvps-search-row select {
+      padding: 8px 11px; border: 1px solid #ddd; border-radius: 7px;
+      font-size: 13px; min-width: 160px;
+    }
+    #page-revisi-picking-slip .rvps-table-wrap { overflow-x: auto; }
+    #page-revisi-picking-slip .rvps-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    #page-revisi-picking-slip .rvps-table thead th {
+      background: #f6f7fb; font-size: 11px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: .5px;
+      padding: 9px 12px; text-align: left; color: #666;
+      border-bottom: 2px solid #eee;
+    }
+    #page-revisi-picking-slip .rvps-table tbody tr { border-bottom: 1px solid #f0f0f0; }
+    #page-revisi-picking-slip .rvps-table tbody tr:hover { background: #fafbff; }
+    #page-revisi-picking-slip .rvps-table tbody td { padding: 9px 12px; vertical-align: middle; }
+    .rvps-badge {
+      display: inline-block; padding: 2px 9px; border-radius: 20px;
+      font-size: 11px; font-weight: 600;
+    }
+    .rvps-badge-jual       { background: #e8f5e9; color: #2e7d32; }
+    .rvps-badge-reprocess  { background: #fff3e0; color: #e65100; }
+    .rvps-badge-pindah     { background: #e3f2fd; color: #1565c0; }
+    .rvps-badge-posted     { background: #e8f5e9; color: #2e7d32; }
+    .rvps-badge-cancelled  { background: #ffebee; color: #c62828; }
+    .rvps-badge-draft      { background: #f3f4f6; color: #555; }
+    #page-revisi-picking-slip .rvps-info-grid {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 12px; margin-bottom: 14px;
+    }
+    #page-revisi-picking-slip .rvps-info-item label {
+      font-size: 11px; color: #888; font-weight: 600; display: block; margin-bottom: 3px;
+    }
+    #page-revisi-picking-slip .rvps-info-item span { font-size: 14px; font-weight: 500; }
+    #page-revisi-picking-slip .rvps-form-grid {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 14px;
+    }
+    #page-revisi-picking-slip .rvps-field-group { display: flex; flex-direction: column; gap: 5px; }
+    #page-revisi-picking-slip .rvps-field-group label { font-size: 12px; font-weight: 600; color: #555; }
+    #page-revisi-picking-slip .rvps-field-group input,
+    #page-revisi-picking-slip .rvps-field-group select,
+    #page-revisi-picking-slip .rvps-field-group textarea {
+      padding: 9px 12px; border: 1px solid #ddd; border-radius: 7px; font-size: 13px; width: 100%;
+    }
+    #page-revisi-picking-slip .rvps-field-group textarea { resize: vertical; min-height: 62px; }
+    #page-revisi-picking-slip .rvps-field-note { font-size: 11px; color: #aaa; margin-top: 2px; }
+    #page-revisi-picking-slip .rvps-field-full { grid-column: 1 / -1; }
+    #page-revisi-picking-slip .rvps-section-header {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 14px; flex-wrap: wrap; gap: 8px;
+    }
+    #page-revisi-picking-slip .rvps-section-title { font-size: 14px; font-weight: 700; color: #1a1a2e; }
+    #page-revisi-picking-slip .rvps-btn-row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
+    #page-revisi-picking-slip .rvps-empty { text-align: center; padding: 32px; color: #aaa; font-size: 13px; }
+    #page-revisi-picking-slip .num-right { text-align: right; font-variant-numeric: tabular-nums; }
+    #page-revisi-picking-slip .ps-row { cursor: pointer; }
+    #page-revisi-picking-slip .ps-row.active-row { background: #eef0ff !important; }
+    #rvps-add-line-section {
+      border-top: 2px dashed #e0e0e0; margin-top: 18px; padding-top: 18px;
+    }
+    #rvps-karung-lookup-info {
+      background: #f6f7fb; border-radius: 8px;
+      padding: 12px 16px; font-size: 13px; margin-top: 10px; display: none;
+    }
+    #rvps-karung-lookup-info .kl-row { display: flex; gap: 20px; flex-wrap: wrap; }
+    #rvps-karung-lookup-info .kl-item label { font-size: 11px; color: #888; display: block; }
+    #rvps-karung-lookup-info .kl-item span  { font-weight: 600; }
+    #rvps-void-section {
+      border: 2px solid #ffcdd2; border-radius: 10px;
+      background: #fff9f9; padding: 20px 24px; margin-bottom: 18px;
+    }
+    #rvps-void-section .rvps-card-title { color: #c62828; }
+    /* Modal form grids */
+    .rvps-modal-box .rvps-form-grid {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 14px; margin-bottom: 0;
+    }
+    .rvps-modal-box .rvps-field-group { display: flex; flex-direction: column; gap: 5px; }
+    .rvps-modal-box .rvps-field-group label { font-size: 12px; font-weight: 600; color: #555; }
+    .rvps-modal-box .rvps-field-group input {
+      padding: 9px 12px; border: 1px solid #ddd; border-radius: 7px; font-size: 13px; width: 100%;
+    }
+    .rvps-modal-box .rvps-field-note { font-size: 11px; color: #aaa; margin-top: 2px; }
+    .rvps-modal-box .rvps-field-full { grid-column: 1 / -1; }
+    .rvps-modal-box .rvps-btn-row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; justify-content: flex-end; }
+    .rvps-confirm-box .rvps-btn-row { display: flex; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
 </style>
 </head>
 <body>
@@ -1501,9 +1650,23 @@
                 <div><span id="ps-userInfo"></span></div>
               </div>
 
+              <!-- DRAFT BANNER: list draft yang ada -->
+              <div id="ps-draft-banner" style="display:none; background:#fffbe6; border:1px solid #ffe58f; border-radius:6px; padding:10px 14px; margin-bottom:10px;">
+                <div style="font-weight:600; font-size:13px; margin-bottom:8px;">📋 Draft Picking Slip Tersimpan</div>
+                <div id="ps-draft-list"></div>
+              </div>
+
+              <!-- DRAFT MODE INDICATOR -->
+              <div id="ps-draft-mode-bar" style="display:none; background:#e6f7ff; border:1px solid #91d5ff; border-radius:6px; padding:8px 14px; margin-bottom:10px; display:none; justify-content:space-between; align-items:center;">
+                <span id="ps-draft-mode-label" style="font-size:13px; font-weight:600; color:#0050b3;">✏️ Mode Draft — <span id="ps-draft-no">–</span></span>
+                <div style="display:flex;gap:6px;">
+                  <button type="button" id="ps-btn-new-ps" class="btn btn-secondary btn-small">📋 Buat PS Baru</button>
+                  <button type="button" id="ps-btn-hapus-draft" class="btn btn-ghost btn-small" style="color:#c00; border:1px solid #ffa39e;">🗑 Hapus Draft</button>
+                </div>
+              </div>
+
               <div class="small-note">
-                Alur: 1) Isi header picking slip → 2) Tambah karung ke daftar →
-                3) Cek total ekor/kg → 4) Submit (otomatis update stok & log_karung).
+                Alur: 1) Isi header → 2) Scan/tambah karung → 3) <strong>Simpan Draft</strong> (kunci karung) → 4) <strong>Submit</strong> (update stok &amp; log).
               </div>
 
               <!-- 1. HEADER PICKING SLIP -->
@@ -1631,15 +1794,21 @@
 
               <div class="divider"></div>
 
-              <!-- 4. SUBMIT -->
-              <div class="section-title">4. Submit Picking Slip</div>
+              <!-- 4. AKSI -->
+              <div class="section-title">4. Simpan &amp; Submit</div>
               <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:4px;">
-                <button type="button" class="btn btn-primary" id="ps-btn-submit">
-                  Submit Picking Slip
+                <button type="button" class="btn btn-primary" id="ps-btn-save-draft">
+                  💾 Simpan Draft
+                </button>
+                <button type="button" class="btn btn-secondary" id="ps-btn-submit" disabled>
+                  ✅ Submit Picking Slip
                 </button>
                 <button type="button" class="btn btn-ghost" id="ps-btn-clear">
                   Clear Form
                 </button>
+              </div>
+              <div class="small-note" style="margin-top:6px;">
+                <strong>Simpan Draft</strong> terlebih dahulu untuk mengunci karung, lalu klik <strong>Submit</strong> untuk memproses transaksi.
               </div>
               <div id="ps-status-message" class="status"></div>
             </div>
@@ -1674,6 +1843,15 @@
                   <label for="rps-date-to">Sampai Tanggal</label>
                   <input type="date" id="rps-date-to" />
                 </div>
+                <div class="field" style="flex:0 0 150px;">
+                  <label for="rps-status-filter">Status</label>
+                  <select id="rps-status-filter">
+                    <option value="">Semua</option>
+                    <option value="draft">Draft</option>
+                    <option value="posted">Posted</option>
+                    <option value="cancelled">Cancelled</option>
+                  </select>
+                </div>
                 <div class="field" style="flex:0 0 160px;">
                   <label>&nbsp;</label>
                   <button class="btn btn-primary" id="rps-btn-search">Cari</button>
@@ -1689,6 +1867,7 @@
                     <th>No Picking Slip</th>
                     <th>Tujuan</th>
                     <th>Customer</th>
+                    <th>Status</th>
                     <th>Karung</th>
                     <th>Ekor</th>
                     <th>Kg</th>
@@ -1709,6 +1888,243 @@
 
             </div>
           </div>
+
+<!-- ════════════════════════════════════════════════════════
+     REVISI PICKING SLIP
+════════════════════════════════════════════════════════ -->
+<div id="page-revisi-picking-slip" style="display:none;">
+  <div class="container" style="max-width:1060px;">
+
+    <div class="top-bar" style="margin-bottom:18px;">
+      <div><strong>✏️ Revisi Picking Slip</strong></div>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <span id="rvps-user-badge" style="font-size:12px;background:#eef0ff;color:#5b6ef5;padding:4px 12px;border-radius:20px;">–</span>
+        <button class="btn btn-ghost btn-small" id="rvps-btn-set-pin" title="Set/Ganti PIN Supervisor">🔑 Set PIN</button>
+      </div>
+    </div>
+
+    <!-- SEARCH -->
+    <div class="rvps-card">
+      <div class="rvps-card-title">Cari Picking Slip (Status: Posted)</div>
+      <div class="rvps-search-row">
+        <div class="rvps-field">
+          <label>No. Picking Slip</label>
+          <input id="rvps-s-no" placeholder="PS-20250101-001" />
+        </div>
+        <div class="rvps-field">
+          <label>Customer / No. SO</label>
+          <input id="rvps-s-customer" placeholder="Nama customer atau no SO" />
+        </div>
+        <div class="rvps-field">
+          <label>Dari Tanggal</label>
+          <input type="date" id="rvps-s-date-from" />
+        </div>
+        <div class="rvps-field">
+          <label>Sampai Tanggal</label>
+          <input type="date" id="rvps-s-date-to" />
+        </div>
+        <div class="rvps-field" style="align-self:flex-end">
+          <button class="btn btn-primary" id="rvps-btn-search">🔍 Cari</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- PS LIST -->
+    <div class="rvps-card">
+      <div class="rvps-card-title">Hasil Pencarian</div>
+      <div class="rvps-table-wrap">
+        <table class="rvps-table">
+          <thead>
+            <tr>
+              <th>No. Picking Slip</th>
+              <th>Tgl Picking</th>
+              <th>Tujuan</th>
+              <th>Customer / Gudang</th>
+              <th>No. SO</th>
+              <th>Status</th>
+              <th>Pilih</th>
+            </tr>
+          </thead>
+          <tbody id="rvps-ps-tbody">
+            <tr><td colspan="7" class="rvps-empty">Masukkan kriteria pencarian lalu klik Cari.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div id="rvps-search-status" class="rvps-msg"></div>
+    </div>
+
+    <!-- DETAIL PANEL -->
+    <div id="rvps-detail-panel" style="display:none;">
+
+      <!-- HEADER CARD -->
+      <div class="rvps-card">
+        <div class="rvps-section-header">
+          <div class="rvps-section-title" id="rvps-ps-title">–</div>
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-ghost btn-small" id="rvps-btn-toggle-header-edit">✏️ Edit Header</button>
+            <button class="btn btn-ghost btn-small" id="rvps-btn-reload-detail">🔄 Refresh</button>
+          </div>
+        </div>
+
+        <!-- VIEW MODE -->
+        <div id="rvps-header-view">
+          <div class="rvps-info-grid">
+            <div class="rvps-info-item"><label>Tanggal Picking</label><span id="rvps-hv-tgl">–</span></div>
+            <div class="rvps-info-item"><label>Tujuan</label><span id="rvps-hv-tujuan">–</span></div>
+            <div class="rvps-info-item"><label>Customer</label><span id="rvps-hv-customer">–</span></div>
+            <div class="rvps-info-item"><label>No. SO</label><span id="rvps-hv-no-so">–</span></div>
+            <div class="rvps-info-item"><label>Gudang Tujuan</label><span id="rvps-hv-gudang">–</span></div>
+            <div class="rvps-info-item"><label>Catatan</label><span id="rvps-hv-catatan">–</span></div>
+          </div>
+        </div>
+
+        <!-- EDIT FORM (hidden) -->
+        <div id="rvps-header-edit-form" style="display:none">
+          <hr style="border:none;border-top:1px solid #eee;margin:16px 0;">
+          <div class="rvps-form-grid">
+            <div class="rvps-field-group">
+              <label>Tanggal Picking</label>
+              <input type="date" id="rvps-he-tgl" />
+              <span class="rvps-field-note">Mengubah tanggal juga menggeser waktu_log di log_karung.</span>
+            </div>
+            <div class="rvps-field-group">
+              <label>Tujuan</label>
+              <select id="rvps-he-tujuan">
+                <option value="jual">Jual</option>
+                <option value="reprocess">Reprocess</option>
+                <option value="pindah_lokasi">Pindah Lokasi</option>
+              </select>
+            </div>
+            <div class="rvps-field-group">
+              <label>Nama Customer</label>
+              <input type="text" id="rvps-he-customer" placeholder="(isi jika tujuan = jual)" />
+            </div>
+            <div class="rvps-field-group">
+              <label>No. SO</label>
+              <input type="text" id="rvps-he-no-so" />
+            </div>
+            <div class="rvps-field-group" id="rvps-he-gudang-row" style="display:none">
+              <label>Gudang Tujuan</label>
+              <select id="rvps-he-gudang">
+                <option value="">-- Pilih gudang tujuan --</option>
+              </select>
+            </div>
+            <div class="rvps-field-group rvps-field-full">
+              <label>Catatan</label>
+              <textarea id="rvps-he-catatan" rows="2"></textarea>
+            </div>
+            <div class="rvps-field-group rvps-field-full">
+              <label>Alasan Revisi Header *</label>
+              <input type="text" id="rvps-he-alasan" placeholder="Jelaskan alasan perubahan header..." />
+            </div>
+          </div>
+          <div class="rvps-btn-row">
+            <button class="btn btn-success" id="rvps-btn-save-header">💾 Simpan Header</button>
+            <button class="btn btn-ghost" id="rvps-btn-cancel-header">Batal</button>
+          </div>
+          <div id="rvps-header-save-status" class="rvps-msg"></div>
+        </div>
+      </div>
+
+      <!-- DETAIL LINES -->
+      <div class="rvps-card">
+        <div class="rvps-section-header">
+          <div class="rvps-section-title">Baris Detail Karung</div>
+          <span id="rvps-detail-count-badge" style="font-size:12px;color:#888"></span>
+        </div>
+        <div class="rvps-table-wrap">
+          <table class="rvps-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Karung ID</th>
+                <th>Item</th>
+                <th>Tgl Produksi</th>
+                <th class="num-right">Qty Ekor</th>
+                <th class="num-right">Qty KG</th>
+                <th class="num-right">Sisa Ekor</th>
+                <th class="num-right">Sisa KG</th>
+                <th>Aksi</th>
+              </tr>
+            </thead>
+            <tbody id="rvps-detail-tbody">
+              <tr><td colspan="9" class="rvps-empty">Pilih picking slip terlebih dahulu.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div id="rvps-detail-status" class="rvps-msg"></div>
+
+        <!-- ADD NEW LINE -->
+        <div id="rvps-add-line-section">
+          <div class="rvps-card-title" style="margin-bottom:10px">➕ Tambah Baris Karung</div>
+          <div class="rvps-search-row" style="align-items:flex-end">
+            <div class="rvps-field">
+              <label>Karung ID</label>
+              <input id="rvps-al-karung-id" placeholder="Scan QR atau ketik Karung ID" style="min-width:200px" />
+            </div>
+            <div class="rvps-field" style="align-self:flex-end; display:flex; gap:6px;">
+              <button class="btn btn-secondary btn-small" id="rvps-btn-open-scanner">📷 Scan QR</button>
+              <button class="btn btn-ghost btn-small" id="rvps-btn-close-scanner" style="display:none">✖ Stop</button>
+              <button class="btn btn-ghost" id="rvps-btn-lookup-karung">🔍 Cek Stok</button>
+            </div>
+          </div>
+          <div id="rvps-scanner-wrap" style="display:none; margin:8px 0;">
+            <div id="rvps-qr-reader" style="width:260px; max-width:100%; border:1px solid #e5e7eb; border-radius:10px; overflow:hidden;"></div>
+          </div>
+          <div id="rvps-karung-lookup-info">
+            <div class="kl-row">
+              <div class="kl-item"><label>Karung ID</label><span id="rvps-kl-id">–</span></div>
+              <div class="kl-item"><label>Item</label><span id="rvps-kl-item">–</span></div>
+              <div class="kl-item"><label>Status</label><span id="rvps-kl-status">–</span></div>
+              <div class="kl-item"><label>Sisa Ekor</label><span id="rvps-kl-ekor">–</span></div>
+              <div class="kl-item"><label>Sisa KG</label><span id="rvps-kl-kg">–</span></div>
+              <div class="kl-item"><label>Tgl Produksi</label><span id="rvps-kl-tgl">–</span></div>
+            </div>
+            <div class="rvps-form-grid" style="margin-top:14px">
+              <div class="rvps-field-group">
+                <label>Qty Ekor Keluar *</label>
+                <input type="number" id="rvps-al-qty-ekor" min="1" step="1" placeholder="0" />
+              </div>
+              <div class="rvps-field-group">
+                <label>Qty KG Keluar *</label>
+                <input type="number" id="rvps-al-qty-kg" min="0.01" step="0.01" placeholder="0.00" />
+              </div>
+              <div class="rvps-field-group rvps-field-full">
+                <label>Alasan / Keterangan *</label>
+                <input type="text" id="rvps-al-alasan" placeholder="Alasan penambahan baris..." />
+              </div>
+            </div>
+            <div class="rvps-btn-row">
+              <button class="btn btn-success" id="rvps-btn-add-line">✅ Tambah Baris</button>
+              <button class="btn btn-ghost" id="rvps-btn-cancel-addline">Batal</button>
+            </div>
+            <div id="rvps-addline-status" class="rvps-msg"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- VOID SECTION -->
+      <div id="rvps-void-section">
+        <div class="rvps-card-title">⚠️ Void / Batalkan Picking Slip</div>
+        <p style="font-size:13px;color:#555;margin-bottom:14px;line-height:1.6">
+          Semua stok karung akan dikembalikan ke gudang dan status PS berubah menjadi <strong>cancelled</strong>.<br>
+          Aksi ini <strong>tidak dapat di-undo otomatis</strong>.
+        </p>
+        <div class="rvps-form-grid">
+          <div class="rvps-field-group rvps-field-full">
+            <label>Alasan Void *</label>
+            <input type="text" id="rvps-void-reason" placeholder="Jelaskan alasan pembatalan picking slip..." />
+          </div>
+        </div>
+        <div class="rvps-btn-row">
+          <button class="btn btn-danger" id="rvps-btn-void-ps">🗑️ Void Picking Slip Ini</button>
+        </div>
+        <div id="rvps-void-status" class="rvps-msg"></div>
+      </div>
+
+    </div><!-- /#rvps-detail-panel -->
+  </div>
+</div><!-- /#page-revisi-picking-slip -->
 
 <div id="page-riwayat-receipt-slip" style="display:none;">
             <div class="container">
@@ -2237,6 +2653,12 @@
                     Tampilkan Laporan
                   </button>
                 </div>
+                <div class="field" style="flex:0 0 180px;">
+                  <label>&nbsp;</label>
+                  <button type="button" class="btn btn-secondary btn-small" id="lm-btn-export" style="display:none;">
+                    ⬇ Export Excel
+                  </button>
+                </div>
               </div>
               <div class="small-note">
                 Konsep: per <code>item</code> menampilkan <strong>Saldo Awal</strong>, mutasi berdasarkan <strong>jenis_perubahan</strong> (fixed), dan <strong>Saldo Akhir</strong>.
@@ -2285,6 +2707,7 @@
                     </tr>
                   </thead>
                   <tbody id="lm-tbody"></tbody>
+                  <tfoot id="lm-tfoot"></tfoot>
                 </table>
               </div>
             </div>
@@ -2522,6 +2945,7 @@
   const pageFormRevisiKarung  = document.getElementById('page-form-revisi-karung');
   const pageFormPickingSlip   = document.getElementById('page-form-picking-slip');
   const pageRiwayatPickingSlip = document.getElementById('page-riwayat-picking-slip');
+  const pageRevisiPickingSlip  = document.getElementById('page-revisi-picking-slip');
   const pageRiwayatReceiptSlip = document.getElementById('page-riwayat-receipt-slip');
   const pageLaporanBatch      = document.getElementById('page-laporan-batch');
   const pageLaporanStok       = document.getElementById('page-laporan-stok');
@@ -2563,10 +2987,11 @@ async function initRiwayatPickingSlipOnce() {
   const rpsKeywordEl  = document.getElementById('rps-keyword');
   const rpsDateFromEl = document.getElementById('rps-date-from');
   const rpsDateToEl   = document.getElementById('rps-date-to');
-  const rpsBtnSearch  = document.getElementById('rps-btn-search');
-  const rpsStatusEl   = document.getElementById('rps-status');
-  const rpsTableEl    = document.getElementById('rps-table');
-  const rpsTbodyEl    = document.getElementById('rps-tbody');
+  const rpsBtnSearch      = document.getElementById('rps-btn-search');
+  const rpsStatusEl       = document.getElementById('rps-status');
+  const rpsStatusFilterEl = document.getElementById('rps-status-filter');
+  const rpsTableEl        = document.getElementById('rps-table');
+  const rpsTbodyEl        = document.getElementById('rps-tbody');
 
   const setStatus = (msg, type) => {
     if (!rpsStatusEl) return;
@@ -2627,6 +3052,10 @@ async function initRiwayatPickingSlipOnce() {
   };
 
   const printSlipById = async (slipId) => {
+    // Buka window SEBELUM await agar tidak diblokir popup blocker
+    const _printWin = window.open('', '_blank', 'width=800,height=900');
+    if (!_printWin) { setStatus('Popup diblokir browser. Izinkan popup lalu coba lagi.', 'error'); return; }
+    _printWin.document.write('<p style="font-family:sans-serif;padding:20px">Memuat data...</p>');
     setStatus('Memuat data picking slip...', '');
     const { data: hdr, error: e1 } = await sb
       .from('picking_slip')
@@ -2653,9 +3082,10 @@ async function initRiwayatPickingSlipOnce() {
 
     setStatus('Membuka jendela print...', 'success');
     try {
-      openPickingSlipWindow(hdr.no_picking_slip || '(tanpa nomor)', hdr, detail);
+      writePickingSlipToWindow(_printWin, hdr.no_picking_slip || '(tanpa nomor)', hdr, detail);
     } catch (e) {
       console.error(e);
+      _printWin.close();
       setStatus('Gagal membuka jendela print: ' + (e.message || ''), 'error');
     }
   };
@@ -2667,23 +3097,57 @@ async function initRiwayatPickingSlipOnce() {
     (rows || []).forEach(r => {
       const t = totalsMap && totalsMap[r.id] ? totalsMap[r.id] : { karung: 0, ekor: 0, kg: 0 };
 
+      const statusLabel = { draft: 'Draft', posted: 'Posted', cancelled: 'Cancelled' };
+      const statusClass = { draft: 'st-draft', posted: 'st-posted', cancelled: 'st-cancelled' };
+      const st = (r.status || '').toLowerCase();
+      const isDraft = st === 'draft';
+
       const tr = document.createElement('tr');
       tr.innerHTML = `
         <td>${escapeHtml(r.tgl_picking || '')}</td>
         <td><strong>${escapeHtml(r.no_picking_slip || '')}</strong></td>
         <td>${escapeHtml(r.tujuan || '')}</td>
         <td>${escapeHtml(r.nama_customer || '')}</td>
+        <td><span class="status-badge ${statusClass[st] || 'st-unknown'}">${escapeHtml(statusLabel[st] || st || '-')}</span></td>
         <td style="text-align:right;">${Number(t.karung || 0)}</td>
         <td style="text-align:right;">${Number(t.ekor || 0)}</td>
         <td style="text-align:right;">${Number(t.kg || 0).toFixed(2)}</td>
         <td>
-          <button class="btn btn-primary btn-small" data-action="print">Print Ulang</button>
+          ${isDraft
+            ? `<button class="btn btn-secondary btn-small" data-action="edit-draft">✏️ Lanjut Edit</button>`
+            : st === 'posted'
+              ? `<button class="btn btn-primary btn-small" data-action="print">Print Ulang</button>
+                 <button class="btn btn-ghost btn-small" data-action="revisi" style="margin-top:4px;">✏️ Revisi</button>`
+              : `<button class="btn btn-primary btn-small" data-action="print">Print Ulang</button>`
+          }
         </td>
       `;
 
-      const btn = tr.querySelector('button[data-action="print"]');
-      if (btn) {
-        btn.addEventListener('click', () => printSlipById(r.id));
+      if (isDraft) {
+        const btn = tr.querySelector('button[data-action="edit-draft"]');
+        if (btn) {
+          btn.addEventListener('click', async () => {
+            setActiveMenu('form-picking-slip');
+            showPage('form-picking-slip');
+            await initPickingSlipOnce();
+            await psLoadDraft(r.id);
+          });
+        }
+      } else {
+        const btnPrint = tr.querySelector('button[data-action="print"]');
+        if (btnPrint) {
+          btnPrint.addEventListener('click', () => printSlipById(r.id));
+        }
+        const btnRevisi = tr.querySelector('button[data-action="revisi"]');
+        if (btnRevisi) {
+          btnRevisi.addEventListener('click', async () => {
+            setActiveMenu('revisi-picking-slip');
+            showPage('revisi-picking-slip');
+            await initRevisiPickingSlipOnce();
+            // Auto-load the PS by no_picking_slip
+            rvpsOpenPS(r.no_picking_slip);
+          });
+        }
       }
 
       rpsTbodyEl.appendChild(tr);
@@ -2707,10 +3171,11 @@ async function initRiwayatPickingSlipOnce() {
   const rpsCountInfo = document.getElementById('rps-count-info');
 
   const getFilters = () => {
-    const keyword = (rpsKeywordEl && rpsKeywordEl.value) ? rpsKeywordEl.value.trim() : '';
-    const dateFrom = (rpsDateFromEl && rpsDateFromEl.value) ? rpsDateFromEl.value : '';
-    const dateTo   = (rpsDateToEl && rpsDateToEl.value) ? rpsDateToEl.value : '';
-    return { keyword, dateFrom, dateTo };
+    const keyword      = (rpsKeywordEl && rpsKeywordEl.value) ? rpsKeywordEl.value.trim() : '';
+    const dateFrom     = (rpsDateFromEl && rpsDateFromEl.value) ? rpsDateFromEl.value : '';
+    const dateTo       = (rpsDateToEl && rpsDateToEl.value) ? rpsDateToEl.value : '';
+    const statusFilter = (rpsStatusFilterEl && rpsStatusFilterEl.value) ? rpsStatusFilterEl.value : '';
+    return { keyword, dateFrom, dateTo, statusFilter };
   };
 
   const updatePagerUI = () => {
@@ -2750,8 +3215,9 @@ async function initRiwayatPickingSlipOnce() {
         .order('created_at', { ascending: false })
         .range(from, to);
 
-      if (filters.dateFrom) q = q.gte('tgl_picking', filters.dateFrom);
-      if (filters.dateTo)   q = q.lte('tgl_picking', filters.dateTo);
+      if (filters.dateFrom)     q = q.gte('tgl_picking', filters.dateFrom);
+      if (filters.dateTo)       q = q.lte('tgl_picking', filters.dateTo);
+      if (filters.statusFilter) q = q.eq('status', filters.statusFilter);
 
       // Keyword search hanya pada kolom text (hindari ILIKE pada enum tujuan).
       if (filters.keyword) {
@@ -2819,6 +3285,982 @@ async function initRiwayatPickingSlipOnce() {
   // Pastikan awalnya tidak memuat data
   updatePagerUI();
 
+}
+
+/* ════════════════════════════════════════════════════════
+   REVISI PICKING SLIP — integrated page
+════════════════════════════════════════════════════════ */
+let rvpsInitialized = false;
+
+// Called externally to auto-open a PS by no_picking_slip after init
+let _rvpsPendingOpenNo = null;
+function rvpsOpenPS(noPickingSlip) {
+  if (!noPickingSlip) return;
+  _rvpsPendingOpenNo = noPickingSlip;
+  // If already initialized, trigger search immediately
+  if (rvpsInitialized) _rvpsDoOpenPending();
+}
+
+async function _rvpsDoOpenPending() {
+  if (!_rvpsPendingOpenNo) return;
+  const no = _rvpsPendingOpenNo;
+  _rvpsPendingOpenNo = null;
+  // Kosongkan filter tanggal & customer agar PS manapun bisa ditemukan
+  document.getElementById('rvps-s-no').value       = no;
+  document.getElementById('rvps-s-customer').value  = '';
+  document.getElementById('rvps-s-date-from').value = '';
+  document.getElementById('rvps-s-date-to').value   = '';
+  if (window._rvpsSearchPS) await window._rvpsSearchPS();
+  if (rvpsPsResults.length === 1 && window._rvpsSelectPS) window._rvpsSelectPS(rvpsPsResults[0]);
+}
+
+// Module-level state (scoped by naming convention)
+let rvpsPsResults    = [];
+let rvpsSelectedPS   = null;
+let rvpsDetailRows   = [];
+let rvpsItemMap      = {};
+let rvpsPinVerified  = false;
+let rvpsPendingPin   = null;
+let rvpsEditingDetail = null;
+let rvpsLookedUpKarung = null;
+let rvpsConfirmCb    = null;
+
+async function initRevisiPickingSlipOnce() {
+  if (rvpsInitialized) {
+    // May have a pending auto-open from riwayat
+    if (_rvpsPendingOpenNo) await _rvpsDoOpenPending();
+    return;
+  }
+  rvpsInitialized = true;
+
+  // ── helpers scoped to this module ──────────────────────
+  const $ = id => document.getElementById(id);
+
+  function fmtDate(d) {
+    if (!d) return '–';
+    return new Date(d + 'T00:00:00').toLocaleDateString('id-ID', { day:'2-digit', month:'short', year:'numeric' });
+  }
+  function fmtNum(n, dec = 0) {
+    if (n == null) return '–';
+    return Number(n).toLocaleString('id-ID', { minimumFractionDigits: dec, maximumFractionDigits: dec });
+  }
+  const fmtKg   = n => fmtNum(n, 2);
+  const fmtEkor = n => fmtNum(n, 0);
+
+  function setMsg(el, type, msg) {
+    if (!el) return;
+    el.className = 'rvps-msg ' + type;
+    el.textContent = msg;
+    el.style.display = msg ? 'block' : 'none';
+  }
+  function clearMsg(el) {
+    if (!el) return;
+    el.className = 'rvps-msg';
+    el.textContent = '';
+    el.style.display = 'none';
+  }
+
+  // waktu_log = tgl_picking jam 18:00:00 WIB (UTC+7), konsisten dengan fn_post_draft_picking_slip
+  function rvpsWaktuLog(tglPicking) {
+    return new Date((tglPicking || rvpsSelectedPS.tgl_picking) + 'T18:00:00+07:00').toISOString();
+  }
+
+  function tujuanBadge(t) {
+    const cls   = { jual:'rvps-badge-jual', reprocess:'rvps-badge-reprocess', pindah_lokasi:'rvps-badge-pindah' };
+    const label = { jual:'Jual', reprocess:'Reprocess', pindah_lokasi:'Pindah Lokasi' };
+    return `<span class="rvps-badge ${cls[t]||'rvps-badge-draft'}">${label[t]||t}</span>`;
+  }
+
+  function calcStatus(sisaEkor, sisaKg, origEkor, origKg) {
+    if (Number(sisaEkor) === 0 && Number(sisaKg) === 0) return 'habis';
+    if (Number(sisaEkor) >= Number(origEkor) && Number(sisaKg) >= Number(origKg)) return 'tersedia';
+    return 'terbuka';
+  }
+
+  // ── User badge ──────────────────────────────────────────
+  $('rvps-user-badge').textContent = operatorDisplayName || currentUser?.email || '–';
+
+  // ── Default date range ──────────────────────────────────
+  const today = new Date();
+  const prior = new Date(today); prior.setDate(today.getDate() - 30);
+  const isoSlice = d => d.toISOString().slice(0, 10);
+  $('rvps-s-date-from').value = isoSlice(prior);
+  $('rvps-s-date-to').value   = isoSlice(today);
+
+  // ── Load master_gudang ke dropdown revisi header ─────────
+  (async () => {
+    const sel = $('rvps-he-gudang');
+    const { data: gudangRows } = await sb.from('master_gudang')
+      .select('gudang_id, nama_gudang').eq('aktif', true).order('gudang_id');
+    (gudangRows || []).forEach(g => {
+      const opt = document.createElement('option');
+      opt.value = g.gudang_id;
+      opt.textContent = g.nama_gudang ? `${g.gudang_id} – ${g.nama_gudang}` : g.gudang_id;
+      sel.appendChild(opt);
+    });
+  })();
+
+  // ── Show/hide gudang row berdasarkan tujuan ──────────────
+  function rvpsUpdateGudangRowVisibility() {
+    const tujuan = $('rvps-he-tujuan').value;
+    $('rvps-he-gudang-row').style.display = tujuan === 'pindah_lokasi' ? '' : 'none';
+    if (tujuan !== 'pindah_lokasi') $('rvps-he-gudang').value = '';
+  }
+  $('rvps-he-tujuan').addEventListener('change', rvpsUpdateGudangRowVisibility);
+
+  // ── CONFIRM DIALOG ──────────────────────────────────────
+  function showConfirm(title, html, yesTxt, yesClass, cb) {
+    $('rvps-confirm-title').textContent = title;
+    $('rvps-confirm-msg').innerHTML = html;
+    const yesBtn = $('rvps-btn-confirm-yes');
+    yesBtn.textContent = yesTxt || 'Ya, Lanjutkan';
+    yesBtn.className = 'btn ' + (yesClass || 'btn-danger');
+    rvpsConfirmCb = cb;
+    $('rvps-confirm-overlay').classList.add('active');
+  }
+  $('rvps-btn-confirm-no').onclick = () => {
+    $('rvps-confirm-overlay').classList.remove('active');
+    rvpsConfirmCb = null;
+  };
+  $('rvps-btn-confirm-yes').onclick = () => {
+    $('rvps-confirm-overlay').classList.remove('active');
+    if (rvpsConfirmCb) rvpsConfirmCb();
+  };
+
+  // ── PIN SUPERVISOR ──────────────────────────────────────
+  function requirePin(actionFn) {
+    if (rvpsPinVerified) { actionFn(); return; }
+    rvpsPendingPin = actionFn;
+    sb.from('profiles').select('supervisor_pin, role').eq('id', currentUser.id).single()
+      .then(({ data }) => {
+        if (!data || !['supervisor', 'admin'].includes(data.role)) {
+          alert('Hanya supervisor atau admin yang bisa melakukan revisi picking slip.');
+          rvpsPendingPin = null;
+          return;
+        }
+        if (!data.supervisor_pin) {
+          $('rvps-setpin-overlay').classList.add('active');
+          $('rvps-setpin-new').value     = '';
+          $('rvps-setpin-confirm').value = '';
+          clearMsg($('rvps-setpin-status'));
+          setTimeout(() => $('rvps-setpin-new').focus(), 100);
+          return;
+        }
+        $('rvps-pin-input').value = '';
+        clearMsg($('rvps-pin-status'));
+        $('rvps-pin-overlay').classList.add('active');
+        setTimeout(() => $('rvps-pin-input').focus(), 100);
+      });
+  }
+
+  // Set PIN
+  $('rvps-btn-setpin-save').onclick = async () => {
+    const newPin  = $('rvps-setpin-new').value;
+    const confPin = $('rvps-setpin-confirm').value;
+    const stEl    = $('rvps-setpin-status');
+    clearMsg(stEl);
+    if (!newPin || newPin.length < 4) { setMsg(stEl, 'error', 'PIN minimal 4 karakter.'); return; }
+    if (newPin !== confPin) { setMsg(stEl, 'error', 'PIN dan konfirmasi tidak cocok.'); return; }
+    const btn = $('rvps-btn-setpin-save');
+    btn.disabled = true;
+    const { error } = await sb.rpc('fn_set_supervisor_pin', { p_pin: newPin });
+    btn.disabled = false;
+    if (error) { setMsg(stEl, 'error', 'Gagal set PIN: ' + (error.message || '')); return; }
+    setMsg(stEl, 'success', 'PIN berhasil disimpan!');
+    setTimeout(() => {
+      $('rvps-setpin-overlay').classList.remove('active');
+      rvpsPinVerified = true;
+      if (rvpsPendingPin) { rvpsPendingPin(); rvpsPendingPin = null; }
+    }, 1200);
+  };
+  $('rvps-btn-setpin-cancel').onclick = () => {
+    $('rvps-setpin-overlay').classList.remove('active');
+    rvpsPendingPin = null;
+  };
+
+  // Verify PIN
+  $('rvps-btn-pin-confirm').onclick = async () => {
+    const pin  = $('rvps-pin-input').value;
+    const stEl = $('rvps-pin-status');
+    clearMsg(stEl);
+    if (!pin) { setMsg(stEl, 'error', 'Masukkan PIN.'); return; }
+    const btn = $('rvps-btn-pin-confirm');
+    btn.disabled = true;
+    const { data: valid, error } = await sb.rpc('fn_validate_supervisor_pin', { p_pin: pin });
+    btn.disabled = false;
+    if (error) { setMsg(stEl, 'error', 'Error: ' + (error.message || '')); return; }
+    if (!valid) { setMsg(stEl, 'error', '❌ PIN salah. Coba lagi.'); return; }
+    rvpsPinVerified = true;
+    $('rvps-pin-overlay').classList.remove('active');
+    if (rvpsPendingPin) { rvpsPendingPin(); rvpsPendingPin = null; }
+  };
+  $('rvps-pin-input').addEventListener('keydown', e => {
+    if (e.key === 'Enter') $('rvps-btn-pin-confirm').click();
+  });
+  $('rvps-btn-pin-cancel').onclick = () => {
+    $('rvps-pin-overlay').classList.remove('active');
+    rvpsPendingPin = null;
+  };
+
+  // Set PIN button in page header
+  $('rvps-btn-set-pin').addEventListener('click', () => {
+    $('rvps-setpin-new').value     = '';
+    $('rvps-setpin-confirm').value = '';
+    clearMsg($('rvps-setpin-status'));
+    $('rvps-setpin-overlay').classList.add('active');
+    setTimeout(() => $('rvps-setpin-new').focus(), 100);
+  });
+
+  // ── SEARCH ──────────────────────────────────────────────
+  $('rvps-btn-search').addEventListener('click', rvpsSearchPS);
+  $('rvps-s-no').addEventListener('keydown', e => { if (e.key === 'Enter') rvpsSearchPS(); });
+
+  async function rvpsSearchPS() {
+    const tbody  = $('rvps-ps-tbody');
+    const statEl = $('rvps-search-status');
+    clearMsg(statEl);
+    tbody.innerHTML = `<tr><td colspan="7" class="rvps-empty"><span class="spinner"></span>Mencari...</td></tr>`;
+
+    const noVal    = $('rvps-s-no').value.trim();
+    const custVal  = $('rvps-s-customer').value.trim();
+    const dateFrom = $('rvps-s-date-from').value;
+    const dateTo   = $('rvps-s-date-to').value;
+
+    let q = sb.from('picking_slip')
+      .select('id, no_picking_slip, tgl_picking, tujuan, nama_customer, no_so, gudang_tujuan, catatan, status')
+      .eq('status', 'posted')
+      .order('tgl_picking', { ascending: false })
+      .order('no_picking_slip', { ascending: false })
+      .limit(80);
+
+    if (noVal)    q = q.ilike('no_picking_slip', `%${noVal}%`);
+    if (custVal)  q = q.or(`nama_customer.ilike.%${custVal}%,no_so.ilike.%${custVal}%`);
+    if (dateFrom) q = q.gte('tgl_picking', dateFrom);
+    if (dateTo)   q = q.lte('tgl_picking', dateTo);
+
+    const { data, error } = await q;
+    if (error) {
+      tbody.innerHTML = `<tr><td colspan="7" class="rvps-empty">Error: ${error.message}</td></tr>`;
+      return;
+    }
+
+    rvpsPsResults = data || [];
+    if (!rvpsPsResults.length) {
+      tbody.innerHTML = `<tr><td colspan="7" class="rvps-empty">Tidak ada Picking Slip ditemukan.</td></tr>`;
+      return;
+    }
+
+    tbody.innerHTML = rvpsPsResults.map(ps => `
+      <tr class="ps-row" data-id="${ps.id}">
+        <td><strong style="font-family:monospace">${ps.no_picking_slip}</strong></td>
+        <td>${fmtDate(ps.tgl_picking)}</td>
+        <td>${tujuanBadge(ps.tujuan)}</td>
+        <td>${ps.nama_customer || ps.gudang_tujuan || '–'}</td>
+        <td>${ps.no_so || '–'}</td>
+        <td><span class="rvps-badge rvps-badge-${ps.status}">${ps.status}</span></td>
+        <td><button class="btn btn-primary btn-small btn-pilih" data-id="${ps.id}">Pilih</button></td>
+      </tr>
+    `).join('');
+
+    setMsg(statEl, 'info', `Ditemukan ${rvpsPsResults.length} Picking Slip.`);
+
+    tbody.querySelectorAll('.btn-pilih').forEach(btn => {
+      btn.addEventListener('click', e => {
+        e.stopPropagation();
+        const ps = rvpsPsResults.find(p => p.id === btn.dataset.id);
+        if (ps) rvpsSelectPS(ps);
+      });
+    });
+    tbody.querySelectorAll('.ps-row').forEach(row => {
+      row.addEventListener('click', () => {
+        const ps = rvpsPsResults.find(p => p.id === row.dataset.id);
+        if (ps) rvpsSelectPS(ps);
+      });
+    });
+  }
+
+  // expose so _rvpsDoOpenPending() can call them
+  window._rvpsSearchPS = rvpsSearchPS;
+  window._rvpsSelectPS = rvpsSelectPS;
+
+  // ── SELECT PS ───────────────────────────────────────────
+  async function rvpsSelectPS(ps) {
+    rvpsSelectedPS = ps;
+
+    document.querySelectorAll('#page-revisi-picking-slip .ps-row').forEach(r => r.classList.remove('active-row'));
+    document.querySelector(`#page-revisi-picking-slip .ps-row[data-id="${ps.id}"]`)?.classList.add('active-row');
+
+    $('rvps-detail-panel').style.display = 'block';
+    $('rvps-detail-panel').scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+    renderHeaderView(ps);
+
+    $('rvps-header-edit-form').style.display = 'none';
+    $('rvps-header-view').style.display = 'block';
+    $('rvps-btn-toggle-header-edit').textContent = '✏️ Edit Header';
+
+    clearMsg($('rvps-void-status'));
+    clearMsg($('rvps-addline-status'));
+    clearMsg($('rvps-detail-status'));
+    $('rvps-karung-lookup-info').style.display = 'none';
+    $('rvps-al-karung-id').value = '';
+    $('rvps-al-qty-ekor').value  = '';
+    $('rvps-al-qty-kg').value    = '';
+    $('rvps-al-alasan').value    = '';
+    $('rvps-void-reason').value  = '';
+    rvpsLookedUpKarung = null;
+
+    await loadItems();
+    await loadDetailRows();
+  }
+
+  function renderHeaderView(ps) {
+    $('rvps-ps-title').textContent      = ps.no_picking_slip;
+    $('rvps-hv-tgl').textContent        = fmtDate(ps.tgl_picking);
+    $('rvps-hv-tujuan').innerHTML       = tujuanBadge(ps.tujuan);
+    $('rvps-hv-customer').textContent   = ps.nama_customer || '–';
+    $('rvps-hv-no-so').textContent      = ps.no_so || '–';
+    $('rvps-hv-gudang').textContent     = ps.gudang_tujuan || '–';
+    $('rvps-hv-catatan').textContent    = ps.catatan || '–';
+  }
+
+  // ── LOAD ITEMS ──────────────────────────────────────────
+  async function loadItems() {
+    if (Object.keys(rvpsItemMap).length > 0) return;
+    const { data } = await sb.from('items').select('item_id, item_name, item_code');
+    (data || []).forEach(it => { rvpsItemMap[it.item_id] = `${it.item_code} – ${it.item_name}`; });
+  }
+
+  // ── LOAD DETAIL ROWS ────────────────────────────────────
+  async function loadDetailRows() {
+    const tbody  = $('rvps-detail-tbody');
+    const statEl = $('rvps-detail-status');
+    clearMsg(statEl);
+    tbody.innerHTML = `<tr><td colspan="9" class="rvps-empty"><span class="spinner"></span>Memuat baris...</td></tr>`;
+
+    const { data, error } = await sb.from('picking_slip_detail')
+      .select('id, picking_slip_id, karung_id, item_id, qty_ekor_keluar, qty_kg_keluar, qty_ekor_sebelum, qty_kg_sebelum, qty_ekor_sisa_setelah, qty_kg_sisa_setelah, tgl_produksi, keterangan, operator')
+      .eq('picking_slip_id', rvpsSelectedPS.id)
+      .order('id', { ascending: true });
+
+    if (error) {
+      tbody.innerHTML = `<tr><td colspan="9" class="rvps-empty">Error: ${error.message}</td></tr>`;
+      return;
+    }
+
+    const karungIds = (data || []).map(r => r.karung_id);
+    let stokMap = {};
+    if (karungIds.length) {
+      const { data: stokRows } = await sb.from('stok_karung')
+        .select('karung_id, qty_ekor, qty_kg, qty_ekor_sisa, qty_kg_sisa, status_karung')
+        .in('karung_id', karungIds);
+      (stokRows || []).forEach(s => { stokMap[s.karung_id] = s; });
+    }
+
+    rvpsDetailRows = (data || []).map(r => ({ ...r, _stok: stokMap[r.karung_id] || null }));
+    $('rvps-detail-count-badge').textContent = `${rvpsDetailRows.length} baris`;
+
+    if (!rvpsDetailRows.length) {
+      tbody.innerHTML = `<tr><td colspan="9" class="rvps-empty">Tidak ada baris detail.</td></tr>`;
+      return;
+    }
+    renderDetailTable();
+  }
+
+  function renderDetailTable() {
+    const tbody = $('rvps-detail-tbody');
+    tbody.innerHTML = rvpsDetailRows.map((r, i) => {
+      const stok     = r._stok;
+      const sisaEkor = stok ? stok.qty_ekor_sisa : r.qty_ekor_sisa_setelah;
+      const sisaKg   = stok ? stok.qty_kg_sisa   : r.qty_kg_sisa_setelah;
+      const itemName = rvpsItemMap[r.item_id] || r.item_id || '–';
+      return `
+        <tr>
+          <td>${i + 1}</td>
+          <td><code style="font-size:12px">${r.karung_id}</code></td>
+          <td style="font-size:12px">${itemName}</td>
+          <td>${fmtDate(r.tgl_produksi)}</td>
+          <td class="num-right">${fmtEkor(r.qty_ekor_keluar)}</td>
+          <td class="num-right">${fmtKg(r.qty_kg_keluar)}</td>
+          <td class="num-right" style="color:${Number(sisaEkor)===0?'#c62828':'#2e7d32'}">${fmtEkor(sisaEkor)}</td>
+          <td class="num-right" style="color:${Number(sisaKg)===0?'#c62828':'#2e7d32'}">${fmtKg(sisaKg)}</td>
+          <td>
+            <button class="btn btn-ghost btn-small btn-edit-qty" data-idx="${i}" style="margin-right:4px">✏️ Edit Qty</button>
+            <button class="btn btn-danger btn-small btn-remove-line" data-idx="${i}">🗑 Hapus</button>
+          </td>
+        </tr>
+      `;
+    }).join('');
+
+    tbody.querySelectorAll('.btn-edit-qty').forEach(btn => {
+      btn.addEventListener('click', () => openEditQtyModal(parseInt(btn.dataset.idx)));
+    });
+    tbody.querySelectorAll('.btn-remove-line').forEach(btn => {
+      btn.addEventListener('click', () => removeLine(parseInt(btn.dataset.idx)));
+    });
+  }
+
+  // ── HEADER EDIT ─────────────────────────────────────────
+  $('rvps-btn-toggle-header-edit').addEventListener('click', () => {
+    const form = $('rvps-header-edit-form');
+    const isHidden = form.style.display === 'none';
+    if (isHidden) {
+      $('rvps-he-tgl').value      = rvpsSelectedPS.tgl_picking || '';
+      $('rvps-he-tujuan').value   = rvpsSelectedPS.tujuan || 'jual';
+      $('rvps-he-customer').value = rvpsSelectedPS.nama_customer || '';
+      $('rvps-he-no-so').value    = rvpsSelectedPS.no_so || '';
+      $('rvps-he-gudang').value   = rvpsSelectedPS.gudang_tujuan || '';
+      $('rvps-he-catatan').value  = rvpsSelectedPS.catatan || '';
+      $('rvps-he-alasan').value   = '';
+      clearMsg($('rvps-header-save-status'));
+      rvpsUpdateGudangRowVisibility();   // show/hide gudang sesuai tujuan
+      form.style.display = 'block';
+      $('rvps-btn-toggle-header-edit').textContent = '✖ Tutup Edit';
+    } else {
+      form.style.display = 'none';
+      $('rvps-btn-toggle-header-edit').textContent = '✏️ Edit Header';
+    }
+  });
+  $('rvps-btn-cancel-header').addEventListener('click', () => {
+    $('rvps-header-edit-form').style.display = 'none';
+    $('rvps-btn-toggle-header-edit').textContent = '✏️ Edit Header';
+  });
+  $('rvps-btn-save-header').addEventListener('click', () => requirePin(saveHeader));
+
+  async function saveHeader() {
+    const alasan = $('rvps-he-alasan').value.trim();
+    const statEl = $('rvps-header-save-status');
+    clearMsg(statEl);
+    if (!alasan) { setMsg(statEl, 'error', 'Alasan revisi wajib diisi.'); return; }
+
+    const newTgl      = $('rvps-he-tgl').value;
+    const newTujuan   = $('rvps-he-tujuan').value;
+    const newCustomer = $('rvps-he-customer').value.trim();
+    const newNoSo     = $('rvps-he-no-so').value.trim();
+    const newGudang   = $('rvps-he-gudang').value.trim();
+    const newCatatan  = $('rvps-he-catatan').value.trim();
+
+    if (!newTgl) { setMsg(statEl, 'error', 'Tanggal picking wajib diisi.'); return; }
+
+    const tglChanged    = newTgl    !== rvpsSelectedPS.tgl_picking;
+    const tujuanChanged = newTujuan !== rvpsSelectedPS.tujuan;
+
+    const btn = $('rvps-btn-save-header');
+    btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>Menyimpan...';
+
+    try {
+      const { error: updErr } = await sb.from('picking_slip').update({
+        tgl_picking      : newTgl,
+        tujuan           : newTujuan,
+        nama_customer    : newCustomer || null,
+        no_so            : newNoSo    || null,
+        gudang_tujuan    : newGudang  || null,
+        catatan          : newCatatan || null,
+        updated_at       : new Date().toISOString(),
+        last_edited_by   : operatorDisplayName,
+        last_edit_reason : `Edit header – ${alasan}`,
+      }).eq('id', rvpsSelectedPS.id);
+
+      if (updErr) throw new Error('Gagal update header: ' + updErr.message);
+
+      if (tglChanged || tujuanChanged) {
+        const oldDate = rvpsSelectedPS.tgl_picking;
+        const diffMs  = tglChanged
+          ? new Date(newTgl + 'T00:00:00').getTime() - new Date(oldDate + 'T00:00:00').getTime()
+          : 0;
+
+        const changeNotes = [];
+        if (tglChanged)    changeNotes.push(`tgl: ${oldDate} → ${newTgl}`);
+        if (tujuanChanged) changeNotes.push(`tujuan: ${rvpsSelectedPS.tujuan} → ${newTujuan}`);
+        const editedReason = `Revisi PS ${rvpsSelectedPS.no_picking_slip}: ${changeNotes.join('; ')} | ${alasan}`;
+
+        // Update log_karung via SECURITY DEFINER function (direct UPDATE diblok RLS)
+        const { error: lErr } = await sb.rpc('fn_revise_picking_slip_header_logs', {
+          p_referensi           : rvpsSelectedPS.no_picking_slip,
+          p_diff_ms             : diffMs,
+          p_new_jenis_perubahan : tujuanChanged ? newTujuan : null,
+          p_edited_reason       : editedReason,
+        });
+        if (lErr) throw new Error('Gagal update log_karung: ' + lErr.message);
+
+        const parts = [];
+        if (tglChanged)    parts.push(`Tanggal ${fmtDate(oldDate)} → ${fmtDate(newTgl)}`);
+        if (tujuanChanged) parts.push(`Tujuan "${rvpsSelectedPS.tujuan}" → "${newTujuan}"`);
+        setMsg(statEl, 'success', `Header tersimpan. ${parts.join(', ')}. Log karung diperbarui.`);
+      } else {
+        setMsg(statEl, 'success', 'Header berhasil disimpan.');
+      }
+
+      rvpsSelectedPS = { ...rvpsSelectedPS, tgl_picking: newTgl, tujuan: newTujuan,
+        nama_customer: newCustomer, no_so: newNoSo, gudang_tujuan: newGudang, catatan: newCatatan };
+      renderHeaderView(rvpsSelectedPS);
+      const idx = rvpsPsResults.findIndex(p => p.id === rvpsSelectedPS.id);
+      if (idx >= 0) rvpsPsResults[idx] = { ...rvpsPsResults[idx], ...rvpsSelectedPS };
+
+    } catch (e) {
+      setMsg(statEl, 'error', e.message);
+    } finally {
+      btn.disabled = false; btn.textContent = '💾 Simpan Header';
+    }
+  }
+
+  // ── EDIT QTY MODAL ──────────────────────────────────────
+  function openEditQtyModal(idx) {
+    rvpsEditingDetail = { ...rvpsDetailRows[idx], _idx: idx };
+    const stok = rvpsEditingDetail._stok;
+
+    $('rvps-eq-sub').textContent      = `Karung: ${rvpsEditingDetail.karung_id}`;
+    $('rvps-eq-qty-ekor').value       = rvpsEditingDetail.qty_ekor_keluar;
+    $('rvps-eq-qty-kg').value         = rvpsEditingDetail.qty_kg_keluar;
+    $('rvps-eq-alasan').value         = '';
+    clearMsg($('rvps-eq-status'));
+
+    if (stok) {
+      const maxEkor = Number(stok.qty_ekor_sisa) + Number(rvpsEditingDetail.qty_ekor_keluar);
+      const maxKg   = Number(stok.qty_kg_sisa)   + Number(rvpsEditingDetail.qty_kg_keluar);
+      $('rvps-eq-note-ekor').textContent = `Sisa saat ini: ${fmtEkor(stok.qty_ekor_sisa)} ekor. Maks: ${fmtEkor(maxEkor)} ekor.`;
+      $('rvps-eq-note-kg').textContent   = `Sisa saat ini: ${fmtKg(stok.qty_kg_sisa)} kg. Maks: ${fmtKg(maxKg)} kg.`;
+    } else {
+      $('rvps-eq-note-ekor').textContent = '';
+      $('rvps-eq-note-kg').textContent   = '';
+    }
+
+    $('rvps-edit-qty-overlay').classList.add('active');
+    setTimeout(() => $('rvps-eq-qty-ekor').focus(), 100);
+  }
+
+  $('rvps-btn-eq-cancel').onclick = () => $('rvps-edit-qty-overlay').classList.remove('active');
+
+  $('rvps-btn-eq-save').onclick = () => requirePin(saveEditQty);
+
+  async function saveEditQty() {
+    const detail  = rvpsEditingDetail;
+    const stok    = detail._stok;
+    const statEl  = $('rvps-eq-status');
+    clearMsg(statEl);
+
+    const newEkor = Number($('rvps-eq-qty-ekor').value);
+    const newKg   = Number($('rvps-eq-qty-kg').value);
+    const alasan  = $('rvps-eq-alasan').value.trim();
+
+    if (!newEkor || newEkor < 1)  { setMsg(statEl, 'error', 'Qty ekor harus ≥ 1.'); return; }
+    if (!newKg   || newKg   <= 0) { setMsg(statEl, 'error', 'Qty kg harus > 0.'); return; }
+    if (!alasan)                   { setMsg(statEl, 'error', 'Alasan wajib diisi.'); return; }
+
+    if (stok) {
+      const maxEkor = Number(stok.qty_ekor_sisa) + Number(detail.qty_ekor_keluar);
+      const maxKg   = Number(stok.qty_kg_sisa)   + Number(detail.qty_kg_keluar);
+      if (newEkor > maxEkor) { setMsg(statEl, 'error', `Maks ekor: ${fmtEkor(maxEkor)}.`); return; }
+      if (newKg   > maxKg)   { setMsg(statEl, 'error', `Maks kg: ${fmtKg(maxKg)}.`);       return; }
+    }
+
+    const btn = $('rvps-btn-eq-save');
+    btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>Menyimpan...';
+
+    try {
+      // Semua 4 step (stok_karung, log_karung, picking_slip_detail, audit header)
+      // dijalankan dalam satu SECURITY DEFINER function agar atomik.
+      // - stok_karung.qty_ekor_sisa  : live sisa (adjust by diff vs keluar lama)
+      // - log_karung.sisa_ekor_setelah: snapshot = qty_ekor_sebelum - newEkor
+      // - picking_slip_detail.qty_ekor_sisa_setelah: sama dengan snapshot di atas
+      const { error: rpcErr } = await sb.rpc('fn_revise_picking_slip_detail_qty', {
+        p_detail_id : detail.id,
+        p_new_ekor  : newEkor,
+        p_new_kg    : newKg,
+        p_alasan    : alasan,
+      });
+      if (rpcErr) throw new Error(rpcErr.message);
+
+      $('rvps-edit-qty-overlay').classList.remove('active');
+      await loadDetailRows();
+    } catch (e) {
+      setMsg(statEl, 'error', '❌ ' + e.message);
+    } finally {
+      btn.disabled = false; btn.textContent = '💾 Simpan';
+    }
+  }
+
+  // ── REMOVE LINE ─────────────────────────────────────────
+  function removeLine(idx) {
+    if (!rvpsSelectedPS) return;
+    const r = rvpsDetailRows[idx];
+    showConfirm(
+      '🗑 Hapus Baris',
+      `Yakin menghapus karung <strong>${r.karung_id}</strong> dari PS ini?<br><br>
+       Stok akan dikembalikan: <strong>${fmtEkor(r.qty_ekor_keluar)} ekor / ${fmtKg(r.qty_kg_keluar)} kg</strong>.`,
+      '🗑 Ya, Hapus',
+      'btn-danger',
+      () => requirePin(() => doRemoveLine(idx))
+    );
+  }
+
+  async function doRemoveLine(idx) {
+    const detail = rvpsDetailRows[idx];
+    const statEl = $('rvps-detail-status');
+    clearMsg(statEl);
+
+    try {
+      const { data: stok, error: stokErr } = await sb.from('stok_karung')
+        .select('karung_id, qty_ekor, qty_kg, qty_ekor_sisa, qty_kg_sisa, status_karung')
+        .eq('karung_id', detail.karung_id).maybeSingle();
+      if (stokErr || !stok) throw new Error('Stok karung tidak ditemukan.');
+
+      const newSisaEkor = Number(stok.qty_ekor_sisa) + Number(detail.qty_ekor_keluar);
+      const newSisaKg   = Number(stok.qty_kg_sisa)   + Number(detail.qty_kg_keluar);
+      const newStatus   = calcStatus(newSisaEkor, newSisaKg, stok.qty_ekor, stok.qty_kg);
+
+      // STEP 1: Restore stok_karung
+      const { error: s1 } = await sb.from('stok_karung')
+        .update({ qty_ekor_sisa: newSisaEkor, qty_kg_sisa: newSisaKg, status_karung: newStatus })
+        .eq('karung_id', detail.karung_id);
+      if (s1) throw new Error('Gagal update stok_karung: ' + s1.message);
+
+      // STEP 2: Ambil jenis_perubahan asli agar reversal log saling cross out
+      const { data: origLog } = await sb.from('log_karung')
+        .select('jenis_perubahan')
+        .eq('karung_id', detail.karung_id)
+        .eq('referensi', rvpsSelectedPS.no_picking_slip)
+        .order('log_id', { ascending: true })
+        .limit(1).maybeSingle();
+      const jenisReversal = origLog?.jenis_perubahan || rvpsSelectedPS.tujuan;
+
+      const { error: s2 } = await sb.from('log_karung').insert({
+        waktu_log        : rvpsWaktuLog(),
+        karung_id        : detail.karung_id,
+        perubahan_ekor   : Number(detail.qty_ekor_keluar),
+        perubahan_kg     : Number(detail.qty_kg_keluar),
+        sisa_ekor_setelah: newSisaEkor,
+        sisa_kg_setelah  : newSisaKg,
+        jenis_perubahan  : jenisReversal,
+        keterangan       : `Hapus baris dari PS ${rvpsSelectedPS.no_picking_slip}`,
+        referensi        : rvpsSelectedPS.no_picking_slip,
+        operator         : operatorDisplayName,
+      });
+      if (s2) throw new Error('Gagal insert log_karung: ' + s2.message);
+
+      // STEP 3: Delete picking_slip_detail
+      const { error: s3 } = await sb.from('picking_slip_detail').delete().eq('id', detail.id);
+      if (s3) throw new Error('Gagal hapus detail: ' + s3.message);
+
+      // STEP 4: Audit header
+      await sb.from('picking_slip').update({
+        updated_at       : new Date().toISOString(),
+        last_edited_by   : operatorDisplayName,
+        last_edit_reason : `Hapus karung ${detail.karung_id} dari PS`,
+      }).eq('id', rvpsSelectedPS.id);
+
+      setMsg(statEl, 'success', `✅ Karung ${detail.karung_id} berhasil dihapus.`);
+      await loadDetailRows();
+    } catch (e) {
+      setMsg(statEl, 'error', '❌ ' + e.message);
+    }
+  }
+
+  // ── ADD LINE ────────────────────────────────────────────
+  $('rvps-btn-lookup-karung').addEventListener('click', lookupKarung);
+  $('rvps-al-karung-id').addEventListener('keydown', e => { if (e.key === 'Enter') lookupKarung(); });
+
+  // ── QR SCANNER (tambah baris) ────────────────────────────
+  let rvpsQr = null;
+
+  async function rvpsStartScanner() {
+    if (!window.Html5Qrcode) { alert('Library QR belum siap. Coba reload halaman.'); return; }
+    try {
+      $('rvps-scanner-wrap').style.display = '';
+      $('rvps-btn-open-scanner').style.display  = 'none';
+      $('rvps-btn-close-scanner').style.display = '';
+      if (!rvpsQr) rvpsQr = new Html5Qrcode('rvps-qr-reader');
+      await rvpsQr.start(
+        { facingMode: 'environment' },
+        { fps: 10, qrbox: { width: 220, height: 220 } },
+        (decodedText) => {
+          const id = normalizeKarungId(decodedText);
+          if (!id) return;
+          $('rvps-al-karung-id').value = id;
+          rvpsStopScanner();
+          lookupKarung();
+        }
+      );
+    } catch (e) {
+      alert('Gagal mengaktifkan kamera: ' + (e.message || e));
+      rvpsStopScanner();
+    }
+  }
+
+  async function rvpsStopScanner() {
+    try { if (rvpsQr) { await rvpsQr.stop(); await rvpsQr.clear(); } } catch (_) {}
+    $('rvps-scanner-wrap').style.display = 'none';
+    $('rvps-btn-open-scanner').style.display  = '';
+    $('rvps-btn-close-scanner').style.display = 'none';
+  }
+
+  $('rvps-btn-open-scanner').addEventListener('click', rvpsStartScanner);
+  $('rvps-btn-close-scanner').addEventListener('click', rvpsStopScanner);
+
+  async function lookupKarung() {
+    const karungId = $('rvps-al-karung-id').value.trim();
+    if (!karungId) return;
+    $('rvps-karung-lookup-info').style.display = 'none';
+    rvpsLookedUpKarung = null;
+
+    const { data: stok, error } = await sb.from('stok_karung')
+      .select('karung_id, item_id, qty_ekor, qty_kg, qty_ekor_sisa, qty_kg_sisa, status_karung, tgl_produksi')
+      .eq('karung_id', karungId).maybeSingle();
+
+    if (error || !stok) {
+      alert(`Karung ${karungId} tidak ditemukan.`); return;
+    }
+    if (Number(stok.qty_ekor_sisa) <= 0) {
+      alert(`Karung ${karungId} sudah habis / tidak ada sisa stok.`); return;
+    }
+    // Check not already in this PS
+    const alreadyIn = rvpsDetailRows.some(r => r.karung_id === karungId);
+    if (alreadyIn) { alert(`Karung ${karungId} sudah ada di baris detail PS ini.`); return; }
+
+    rvpsLookedUpKarung = stok;
+    $('rvps-kl-id').textContent     = stok.karung_id;
+    $('rvps-kl-item').textContent   = rvpsItemMap[stok.item_id] || stok.item_id || '–';
+    $('rvps-kl-status').textContent = stok.status_karung || '–';
+    $('rvps-kl-ekor').textContent   = fmtEkor(stok.qty_ekor_sisa);
+    $('rvps-kl-kg').textContent     = fmtKg(stok.qty_kg_sisa);
+    $('rvps-kl-tgl').textContent    = fmtDate(stok.tgl_produksi);
+    $('rvps-karung-lookup-info').style.display = 'block';
+  }
+
+  $('rvps-btn-cancel-addline').addEventListener('click', () => {
+    $('rvps-karung-lookup-info').style.display = 'none';
+    $('rvps-al-karung-id').value = '';
+    rvpsLookedUpKarung = null;
+  });
+
+  $('rvps-btn-add-line').addEventListener('click', () => addLine());
+
+  function addLine() {
+    const stok   = rvpsLookedUpKarung;
+    const statEl = $('rvps-addline-status');
+    clearMsg(statEl);
+
+    if (!stok) { setMsg(statEl, 'error', 'Cek stok karung terlebih dahulu.'); return; }
+
+    const newEkor = Number($('rvps-al-qty-ekor').value);
+    const newKg   = Number($('rvps-al-qty-kg').value);
+    const alasan  = $('rvps-al-alasan').value.trim();
+
+    if (!newEkor || newEkor < 1)  { setMsg(statEl, 'error', 'Qty ekor harus ≥ 1.'); return; }
+    if (!newKg   || newKg   <= 0) { setMsg(statEl, 'error', 'Qty kg harus > 0.'); return; }
+    if (newEkor > Number(stok.qty_ekor_sisa)) { setMsg(statEl, 'error', `Maks ekor: ${fmtEkor(stok.qty_ekor_sisa)}.`); return; }
+    if (newKg   > Number(stok.qty_kg_sisa))   { setMsg(statEl, 'error', `Maks kg: ${fmtKg(stok.qty_kg_sisa)}.`); return; }
+    if (!alasan) { setMsg(statEl, 'error', 'Alasan wajib diisi.'); return; }
+
+    const newSisaEkor = Number(stok.qty_ekor_sisa) - newEkor;
+    const newSisaKg   = Number(stok.qty_kg_sisa)   - newKg;
+    const newStatus   = calcStatus(newSisaEkor, newSisaKg, stok.qty_ekor, stok.qty_kg);
+    const jenis       = rvpsSelectedPS.tujuan || 'jual';
+
+    showConfirm(
+      '➕ Tambah Baris',
+      `Tambah karung <strong>${stok.karung_id}</strong> ke PS ini?<br><br>
+       Keluar: <strong>${fmtEkor(newEkor)} ekor / ${fmtKg(newKg)} kg</strong><br>
+       Sisa setelah: <strong>${fmtEkor(newSisaEkor)} ekor / ${fmtKg(newSisaKg)} kg</strong>`,
+      '✅ Ya, Tambah',
+      'btn-success',
+      () => requirePin(() => doAddLine(stok, newEkor, newKg, newSisaEkor, newSisaKg, newStatus, jenis, alasan))
+    );
+  }
+
+  async function doAddLine(stok, newEkor, newKg, newSisaEkor, newSisaKg, newStatus, jenis, alasan) {
+    const statEl = $('rvps-addline-status');
+    clearMsg(statEl);
+
+    try {
+      // STEP 1: Update stok_karung
+      const { error: s1 } = await sb.from('stok_karung')
+        .update({ qty_ekor_sisa: newSisaEkor, qty_kg_sisa: newSisaKg, status_karung: newStatus })
+        .eq('karung_id', stok.karung_id);
+      if (s1) throw new Error('Gagal update stok_karung: ' + s1.message);
+
+      // STEP 2: Insert picking_slip_detail
+      const { error: s2 } = await sb.from('picking_slip_detail').insert({
+        picking_slip_id      : rvpsSelectedPS.id,
+        karung_id            : stok.karung_id,
+        item_id              : stok.item_id,
+        qty_ekor_keluar      : newEkor,
+        qty_kg_keluar        : newKg,
+        qty_ekor_sebelum     : stok.qty_ekor_sisa,
+        qty_kg_sebelum       : stok.qty_kg_sisa,
+        qty_ekor_sisa_setelah: newSisaEkor,
+        qty_kg_sisa_setelah  : newSisaKg,
+        status_akhir_karung  : newStatus,
+        tgl_produksi         : stok.tgl_produksi || null,
+        keterangan           : alasan,
+        operator             : operatorDisplayName,
+      });
+      if (s2) throw new Error('Gagal insert picking_slip_detail: ' + s2.message);
+
+      // STEP 3: Insert log_karung
+      const { error: s3 } = await sb.from('log_karung').insert({
+        waktu_log        : rvpsWaktuLog(),
+        karung_id        : stok.karung_id,
+        perubahan_ekor   : -newEkor,
+        perubahan_kg     : -newKg,
+        sisa_ekor_setelah: newSisaEkor,
+        sisa_kg_setelah  : newSisaKg,
+        jenis_perubahan  : jenis,
+        keterangan       : `Tambah baris PS ${rvpsSelectedPS.no_picking_slip} – ${alasan}`,
+        referensi        : rvpsSelectedPS.no_picking_slip,
+        operator         : operatorDisplayName,
+      });
+      if (s3) throw new Error('Gagal insert log_karung: ' + s3.message);
+
+      // STEP 4: Audit header
+      await sb.from('picking_slip').update({
+        updated_at       : new Date().toISOString(),
+        last_edited_by   : operatorDisplayName,
+        last_edit_reason : `Tambah karung ${stok.karung_id} (${fmtEkor(newEkor)} ekor / ${fmtKg(newKg)} kg) – ${alasan}`,
+      }).eq('id', rvpsSelectedPS.id);
+
+      setMsg(statEl, 'success', `✅ Karung ${stok.karung_id} berhasil ditambahkan.`);
+      rvpsLookedUpKarung = null;
+      $('rvps-karung-lookup-info').style.display = 'none';
+      $('rvps-al-karung-id').value = '';
+      $('rvps-al-qty-ekor').value  = '';
+      $('rvps-al-qty-kg').value    = '';
+      $('rvps-al-alasan').value    = '';
+      await loadDetailRows();
+
+    } catch (e) {
+      setMsg(statEl, 'error', '❌ ' + e.message);
+      // Rollback stok
+      await sb.from('stok_karung')
+        .update({ qty_ekor_sisa: stok.qty_ekor_sisa, qty_kg_sisa: stok.qty_kg_sisa, status_karung: stok.status_karung })
+        .eq('karung_id', stok.karung_id);
+    }
+  }
+
+  // ── VOID ENTIRE PS ──────────────────────────────────────
+  $('rvps-btn-void-ps').addEventListener('click', () => {
+    if (!rvpsSelectedPS) return;
+    const reason = $('rvps-void-reason').value.trim();
+    const statEl = $('rvps-void-status');
+    clearMsg(statEl);
+    if (!reason) { setMsg(statEl, 'error', 'Alasan void wajib diisi.'); return; }
+    if (!rvpsDetailRows.length) { setMsg(statEl, 'error', 'Tidak ada baris detail untuk di-void.'); return; }
+    requirePin(() => {
+      showConfirm(
+        '⚠️ Void Picking Slip',
+        `Yakin membatalkan <strong>${rvpsSelectedPS.no_picking_slip}</strong>?<br><br>
+         Semua <strong>${rvpsDetailRows.length} baris</strong> karung akan dikembalikan stoknya.<br>
+         Status PS akan berubah menjadi <strong>cancelled</strong>.<br><br>
+         Alasan: <em>${reason}</em>`,
+        '🗑 Ya, Void Picking Slip',
+        'btn-danger',
+        () => doVoidPS(reason)
+      );
+    });
+  });
+
+  async function doVoidPS(reason) {
+    const statEl = $('rvps-void-status');
+    clearMsg(statEl);
+    const btn = $('rvps-btn-void-ps');
+    btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>Memproses...';
+
+    const errors = [];
+    let successCount = 0;
+
+    try {
+      // Ambil jenis_perubahan asli per karung dari log PS ini
+      const { data: origLogs } = await sb.from('log_karung')
+        .select('karung_id, jenis_perubahan')
+        .eq('referensi', rvpsSelectedPS.no_picking_slip);
+      const jenisMap = {};
+      (origLogs || []).forEach(l => { jenisMap[l.karung_id] = l.jenis_perubahan; });
+
+      for (const detail of rvpsDetailRows) {
+        try {
+          const { data: stok, error: stokErr } = await sb.from('stok_karung')
+            .select('karung_id, qty_ekor, qty_kg, qty_ekor_sisa, qty_kg_sisa, status_karung')
+            .eq('karung_id', detail.karung_id).maybeSingle();
+
+          if (stokErr || !stok) { errors.push(`Karung ${detail.karung_id}: tidak ditemukan`); continue; }
+
+          const newSisaEkor = Number(stok.qty_ekor_sisa) + Number(detail.qty_ekor_keluar);
+          const newSisaKg   = Number(stok.qty_kg_sisa)   + Number(detail.qty_kg_keluar);
+          const newStatus   = calcStatus(newSisaEkor, newSisaKg, stok.qty_ekor, stok.qty_kg);
+
+          const { error: s1 } = await sb.from('stok_karung')
+            .update({ qty_ekor_sisa: newSisaEkor, qty_kg_sisa: newSisaKg, status_karung: newStatus })
+            .eq('karung_id', detail.karung_id);
+          if (s1) { errors.push(`Stok ${detail.karung_id}: ${s1.message}`); continue; }
+
+          // Pakai jenis_perubahan yang sama dengan log asli agar saling cross out
+          const jenisVoid = jenisMap[detail.karung_id] || rvpsSelectedPS.tujuan;
+
+          const { error: s2 } = await sb.from('log_karung').insert({
+            waktu_log        : rvpsWaktuLog(),
+            karung_id        : detail.karung_id,
+            perubahan_ekor   : Number(detail.qty_ekor_keluar),
+            perubahan_kg     : Number(detail.qty_kg_keluar),
+            sisa_ekor_setelah: newSisaEkor,
+            sisa_kg_setelah  : newSisaKg,
+            jenis_perubahan  : jenisVoid,
+            keterangan       : `VOID PS ${rvpsSelectedPS.no_picking_slip} – ${reason}`,
+            referensi        : rvpsSelectedPS.no_picking_slip + '-VOID',
+            operator         : operatorDisplayName,
+          });
+          if (s2) { errors.push(`Log ${detail.karung_id}: ${s2.message}`); continue; }
+
+          successCount++;
+        } catch (lineErr) {
+          errors.push(`Karung ${detail.karung_id}: ${lineErr.message}`);
+        }
+      }
+
+      const { error: psErr } = await sb.from('picking_slip').update({
+        status           : 'cancelled',
+        updated_at       : new Date().toISOString(),
+        last_edited_by   : operatorDisplayName,
+        last_edit_reason : `VOID – ${reason}`,
+      }).eq('id', rvpsSelectedPS.id);
+
+      if (psErr) {
+        errors.push('Gagal update status PS: ' + psErr.message);
+      } else {
+        rvpsSelectedPS = { ...rvpsSelectedPS, status: 'cancelled' };
+        const idx = rvpsPsResults.findIndex(p => p.id === rvpsSelectedPS.id);
+        if (idx >= 0) rvpsPsResults[idx].status = 'cancelled';
+      }
+
+      if (errors.length) {
+        setMsg(statEl, 'warning', `⚠️ Selesai dengan ${errors.length} error. ${successCount} karung di-restore. ${errors.join('; ')}`);
+      } else {
+        setMsg(statEl, 'success', `✅ PS ${rvpsSelectedPS.no_picking_slip} berhasil di-void. ${successCount} karung dikembalikan.`);
+        btn.textContent = '✅ Sudah Di-Void';
+      }
+
+      await loadDetailRows();
+    } catch (e) {
+      setMsg(statEl, 'error', '❌ Error: ' + e.message);
+    } finally {
+      if (btn.textContent !== '✅ Sudah Di-Void') {
+        btn.disabled = false; btn.textContent = '🗑️ Void Picking Slip Ini';
+      }
+    }
+  }
+
+  // ── REFRESH ─────────────────────────────────────────────
+  $('rvps-btn-reload-detail').addEventListener('click', async () => {
+    if (!rvpsSelectedPS) return;
+    const { data: freshPS } = await sb.from('picking_slip')
+      .select('id, no_picking_slip, tgl_picking, tujuan, nama_customer, no_so, gudang_tujuan, catatan, status')
+      .eq('id', rvpsSelectedPS.id).maybeSingle();
+    if (freshPS) { rvpsSelectedPS = freshPS; renderHeaderView(freshPS); }
+    await loadDetailRows();
+    setMsg($('rvps-detail-status'), 'info', 'Data berhasil di-refresh.');
+  });
+
+  // Handle any pending auto-open from rvpsOpenPS() called before init completed
+  if (_rvpsPendingOpenNo) await _rvpsDoOpenPending();
 }
 
 // ===== Riwayat Receipt Slip (Print Ulang saja) — Global Safe Implementation =====
@@ -3443,6 +4885,9 @@ async function initRiwayatReceiptSlipOnce() {
 
     // Print util: ambil header + detail, lalu pakai window print picking slip yang sudah ada
     async function printPickingSlipById(slipId) {
+      const _printWin = window.open('', '_blank', 'width=800,height=900');
+      if (!_printWin) { alert('Popup diblokir browser. Izinkan popup lalu coba lagi.'); return; }
+      _printWin.document.write('<p style="font-family:sans-serif;padding:20px">Memuat data...</p>');
       const { data: hdr, error: e1 } = await sb
         .from('picking_slip')
         .select('*')
@@ -3473,7 +4918,7 @@ async function initRiwayatReceiptSlipOnce() {
         item_name: itemMap[r.item_id] || r.item_id,
       }));
 
-      openPickingSlipWindow(hdr.no_picking_slip || '(tanpa nomor)', hdr, detailMapped);
+      writePickingSlipToWindow(_printWin, hdr.no_picking_slip || '(tanpa nomor)', hdr, detailMapped);
     }
 
     async function runSearch() {
@@ -3615,10 +5060,15 @@ async function initRiwayatReceiptSlipOnce() {
         await initGabungKarungOnce();
       }
       if (page === 'form-picking-slip') {
-      await initPickingSlipOnce();
+        await initPickingSlipOnce();
+        // Refresh banner draft setiap kali user kembali ke halaman ini
+        if (typeof psLoadUserDrafts === 'function') await psLoadUserDrafts();
       }
       if (page === 'riwayat-picking-slip') {
         await initRiwayatPickingSlipOnce();
+      }
+      if (page === 'revisi-picking-slip') {
+        await initRevisiPickingSlipOnce();
       }
       if (page === 'riwayat-receipt-slip') {
         await initRiwayatReceiptSlipOnce();
@@ -3680,6 +5130,7 @@ if (window.innerWidth <= 768) {
     setPageVisible(pageFormPickingSlip,  (page === 'form-picking-slip'));
     setPageVisible(pageFormTambahItem,  (page === 'form-tambah-item'));
     setPageVisible(pageRiwayatPickingSlip,(page === 'riwayat-picking-slip'));
+    setPageVisible(pageRevisiPickingSlip, (page === 'revisi-picking-slip'));
     setPageVisible(pageRiwayatReceiptSlip,(page === 'riwayat-receipt-slip'));
     setPageVisible(pageLaporanBatch,     (page === 'laporan-batch'));
     setPageVisible(pageLaporanStok,      (page === 'laporan-stok'));
@@ -6589,10 +8040,345 @@ try {
   const psSummaryBox       = document.getElementById('ps-summary');
 
   const psBtnSubmit        = document.getElementById('ps-btn-submit');
+  const psBtnSaveDraft     = document.getElementById('ps-btn-save-draft');
   const psBtnClear         = document.getElementById('ps-btn-clear');
+  const psBtnHapusDraft    = document.getElementById('ps-btn-hapus-draft');
+  const psBtnNewPS         = document.getElementById('ps-btn-new-ps');
   const psStatusMessage    = document.getElementById('ps-status-message');
+  const psDraftBanner      = document.getElementById('ps-draft-banner');
+  const psDraftList        = document.getElementById('ps-draft-list');
+  const psDraftModeBar     = document.getElementById('ps-draft-mode-bar');
+  const psDraftModeLabel   = document.getElementById('ps-draft-mode-label');
+  const psDraftNoSpan      = document.getElementById('ps-draft-no');
 
-  let psDetails = [];
+  let psDetails      = [];
+  let currentDraftId = null;   // uuid draft yang sedang aktif, null = belum ada draft
+  let psDraftMode    = false;  // true = sedang dalam mode draft (draft sudah tersimpan)
+
+  // ── Helper: masuk/keluar mode draft ──────────────────────
+  function psEnterDraftMode(psId, noPicking) {
+    currentDraftId = psId;
+    psDraftMode    = true;
+    if (psDraftModeBar)  { psDraftModeBar.style.display  = 'flex'; }
+    if (psDraftNoSpan)   { psDraftNoSpan.textContent      = noPicking || psId; }
+    if (psBtnSaveDraft)  { psBtnSaveDraft.textContent     = '💾 Simpan Perubahan Draft'; }
+    if (psBtnSubmit)     { psBtnSubmit.disabled           = false; }
+    if (psDraftBanner)   { psDraftBanner.style.display    = 'none'; }
+  }
+
+  function psExitDraftMode() {
+    currentDraftId = null;
+    psDraftMode    = false;
+    if (psDraftModeBar)  { psDraftModeBar.style.display  = 'none'; }
+    if (psBtnSaveDraft)  { psBtnSaveDraft.textContent     = '💾 Simpan Draft'; }
+    if (psBtnSubmit)     { psBtnSubmit.disabled           = true; }
+  }
+
+  // ── Reset form untuk membuat PS baru (tanpa hapus draft lama) ──
+  async function psResetFormForNew() {
+    psExitDraftMode();
+    // Reset field header
+    if (psTglPickingInput) {
+      const now = new Date();
+      psTglPickingInput.value = new Date(now.getTime() - now.getTimezoneOffset() * 60000)
+        .toISOString().slice(0, 10);
+    }
+    if (psTujuanSelect)       psTujuanSelect.value       = 'jual';
+    if (psNamaCustomerInput)  psNamaCustomerInput.value  = '';
+    if (psNoSoInput)          psNoSoInput.value          = '';
+    if (psCatatanInput)       psCatatanInput.value        = '';
+    if (psGudangSelect)       psGudangSelect.value        = '';
+    // Reset event tujuan agar row jual/gudang kembali ke state yang benar
+    if (psTujuanSelect) psTujuanSelect.dispatchEvent(new Event('change'));
+    // Reset detail & status
+    psDetails = [];
+    if (psDetailTable)   psDetailTable.style.display   = 'none';
+    if (psSummaryBox)    psSummaryBox.style.display     = 'none';
+    psStatusMessage.textContent = '';
+    psStatusMessage.className   = 'status';
+    // Refresh banner draft (tampilkan draft lama yang masih tersimpan)
+    await psLoadUserDrafts();
+  }
+
+  // ── Load daftar draft milik user ─────────────────────────
+  async function psLoadUserDrafts() {
+    if (!psDraftBanner || !psDraftList) return;
+    try {
+      const { data, error } = await sb.rpc('fn_get_my_drafts');
+      if (error) { console.warn('fn_get_my_drafts error:', error); return; }
+      const drafts = data || [];
+      if (drafts.length === 0) { psDraftBanner.style.display = 'none'; return; }
+
+      psDraftList.innerHTML = '';
+      drafts.forEach(d => {
+        const label = `${d.no_picking_slip} — ${d.tgl_picking} — ${d.tujuan}` +
+          (d.nama_customer ? ` (${d.nama_customer})` : '') +
+          ` · ${d.karung_count} karung`;
+        const row = document.createElement('div');
+        row.style.cssText = 'display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:13px;';
+        row.innerHTML = `<span style="flex:1">${escapeHtml(label)}</span>`;
+        const btnLanjut = document.createElement('button');
+        btnLanjut.type = 'button';
+        btnLanjut.className = 'btn btn-primary btn-small';
+        btnLanjut.textContent = 'Lanjut';
+        btnLanjut.addEventListener('click', () => psLoadDraft(d.id));
+        const btnHapus = document.createElement('button');
+        btnHapus.type = 'button';
+        btnHapus.className = 'btn btn-ghost btn-small';
+        btnHapus.style.color = '#c00';
+        btnHapus.textContent = 'Hapus';
+        btnHapus.addEventListener('click', () => psHapusDraft(d.id, d.no_picking_slip));
+        row.appendChild(btnLanjut);
+        row.appendChild(btnHapus);
+        psDraftList.appendChild(row);
+      });
+      psDraftBanner.style.display = 'block';
+    } catch (e) {
+      console.warn('psLoadUserDrafts error:', e);
+    }
+  }
+
+  // ── Load draft ke form ────────────────────────────────────
+  async function psLoadDraft(psId) {
+    psStatusMessage.textContent = 'Memuat draft...';
+    psStatusMessage.className   = 'status';
+    try {
+      // Ambil header
+      const { data: hdr, error: e1 } = await sb
+        .from('picking_slip').select('*').eq('id', psId).eq('status','draft').single();
+      if (e1 || !hdr) throw new Error('Draft tidak ditemukan');
+
+      // Ambil detail (termasuk id agar bisa update qty saat simpan draft)
+      const { data: det, error: e2 } = await sb
+        .from('picking_slip_detail')
+        .select('id, karung_id, item_id, qty_ekor_sebelum, qty_kg_sebelum, qty_ekor_keluar, qty_kg_keluar')
+        .eq('picking_slip_id', psId)
+        .order('id', { ascending: true });
+      if (e2) throw e2;
+
+      // Ambil item names
+      const itemIds = [...new Set((det||[]).map(r => r.item_id).filter(Boolean))];
+      const itemNameMap = {};
+      if (itemIds.length) {
+        const { data: items } = await sb.from('items').select('item_id, item_name').in('item_id', itemIds);
+        (items||[]).forEach(i => { itemNameMap[i.item_id] = i.item_name; });
+      }
+
+      // Isi header form
+      if (psTglPickingInput) psTglPickingInput.value = hdr.tgl_picking || '';
+      if (psTujuanSelect)    psTujuanSelect.value    = hdr.tujuan || '';
+      if (psTujuanSelect)    psTujuanSelect.dispatchEvent(new Event('change'));
+      if (psNamaCustomerInput) psNamaCustomerInput.value = hdr.nama_customer || '';
+      if (psNoSoInput)         psNoSoInput.value          = hdr.no_so || '';
+      if (psGudangSelect)      psGudangSelect.value        = hdr.gudang_tujuan || '';
+      if (psCatatanInput)      psCatatanInput.value        = hdr.catatan || '';
+
+      // Isi psDetails — simpan juga detail_id agar qty bisa diupdate saat simpan draft
+      psDetails = (det||[]).map(r => ({
+        detail_id:       r.id,              // ← untuk update qty saat simpan draft
+        karung_id:       r.karung_id,
+        item_id:         r.item_id,
+        item_name:       itemNameMap[r.item_id] || r.item_id || '-',
+        qty_ekor_sisa:   r.qty_ekor_sebelum,
+        qty_kg_sisa:     r.qty_kg_sebelum,
+        qty_ekor_keluar: r.qty_ekor_keluar,
+        qty_kg_keluar:   r.qty_kg_keluar,
+      }));
+
+      psEnterDraftMode(psId, hdr.no_picking_slip);
+      psRenderDetailTable();
+      psStatusMessage.textContent = `Draft ${hdr.no_picking_slip} dimuat. Tambah karung atau langsung Submit.`;
+      psStatusMessage.className   = 'status success';
+    } catch (e) {
+      console.error(e);
+      psStatusMessage.textContent = 'Gagal memuat draft: ' + (e.message || '');
+      psStatusMessage.className   = 'status error';
+    }
+  }
+
+  // ── Simpan Draft (buat baru) atau Simpan Perubahan Draft (update header + qty baris) ─
+  async function psSaveDraft() {
+    psStatusMessage.textContent = '';
+    psStatusMessage.className   = 'status';
+
+    const tujuan       = psTujuanSelect ? psTujuanSelect.value : '';
+    const tglPicking   = psTglPickingInput ? psTglPickingInput.value : '';
+    const namaCustomer = psNamaCustomerInput ? psNamaCustomerInput.value.trim() : '';
+    const noSo         = psNoSoInput ? psNoSoInput.value.trim() : '';
+    const gudangTujuan = psGudangSelect ? psGudangSelect.value : '';
+    const catatan      = psCatatanInput ? psCatatanInput.value.trim() : '';
+
+    if (!tujuan) {
+      psStatusMessage.textContent = 'Tujuan wajib dipilih sebelum simpan draft.';
+      psStatusMessage.className   = 'status error'; return;
+    }
+    if (tujuan === 'jual' && !namaCustomer) {
+      psStatusMessage.textContent = 'Nama customer wajib diisi untuk tujuan JUAL.';
+      psStatusMessage.className   = 'status error'; return;
+    }
+    if (tujuan === 'pindah_lokasi' && !gudangTujuan) {
+      psStatusMessage.textContent = 'Gudang tujuan wajib dipilih untuk PINDAH LOKASI.';
+      psStatusMessage.className   = 'status error'; return;
+    }
+
+    const header = {
+      tgl_picking:    tglPicking || null,
+      tujuan,
+      nama_customer:  namaCustomer || null,
+      no_so:          noSo || null,
+      gudang_tujuan:  gudangTujuan || null,
+      catatan:        catatan || null
+    };
+
+    // Jika sudah ada draft → update header + qty detail yang berubah
+    if (psDraftMode && currentDraftId) {
+      psStatusMessage.textContent = 'Mengupdate draft...';
+      psStatusMessage.className   = 'status';
+
+      // 1. Update header
+      const { error: hdrErr } = await sb.rpc('fn_update_draft_header', {
+        p_ps_id: currentDraftId, p_header: header
+      });
+      if (hdrErr) {
+        psStatusMessage.textContent = 'Gagal update header: ' + (hdrErr.message || '');
+        psStatusMessage.className   = 'status error'; return;
+      }
+
+      // 2. Update qty tiap baris detail yang punya detail_id (loaded dari DB)
+      const qtyErrors = [];
+      for (const row of psDetails) {
+        if (!row.detail_id) continue; // baris baru yang ditambah saat draft → sudah dihandle fn_add_karung_to_draft
+        const { error: dErr } = await sb.from('picking_slip_detail')
+          .update({
+            qty_ekor_keluar: row.qty_ekor_keluar,
+            qty_kg_keluar:   row.qty_kg_keluar,
+          })
+          .eq('id', row.detail_id);
+        if (dErr) qtyErrors.push(`${row.karung_id}: ${dErr.message}`);
+      }
+
+      if (qtyErrors.length) {
+        psStatusMessage.textContent = `Header tersimpan, tapi ada error update qty: ${qtyErrors.join('; ')}`;
+        psStatusMessage.className   = 'status error';
+      } else {
+        psStatusMessage.textContent = 'Draft berhasil diupdate (header + qty baris).';
+        psStatusMessage.className   = 'status success';
+      }
+      return;
+    }
+
+    // Buat draft baru — perlu minimal 1 karung
+    if (!psDetails.length) {
+      psStatusMessage.textContent = 'Tambahkan minimal 1 karung sebelum menyimpan draft.';
+      psStatusMessage.className   = 'status error'; return;
+    }
+
+    const detailPayload = psDetails.map(r => ({
+      karung_id:       r.karung_id,
+      item_id:         r.item_id,
+      qty_ekor_keluar: r.qty_ekor_keluar,
+      qty_kg_keluar:   r.qty_kg_keluar
+    }));
+
+    psStatusMessage.textContent = 'Menyimpan draft...';
+    if (psBtnSaveDraft) psBtnSaveDraft.disabled = true;
+
+    const { data, error } = await sb.rpc('fn_save_draft_picking_slip', {
+      payload: { header, detail: detailPayload }
+    });
+
+    if (psBtnSaveDraft) psBtnSaveDraft.disabled = false;
+
+    if (error) {
+      psStatusMessage.textContent = 'Gagal simpan draft: ' + (error.message || '');
+      psStatusMessage.className   = 'status error'; return;
+    }
+
+    psEnterDraftMode(data.picking_slip_id, data.no_picking_slip);
+    psStatusMessage.textContent = `Draft ${data.no_picking_slip} tersimpan! Karung sudah dikunci. Klik Submit jika siap.`;
+    psStatusMessage.className   = 'status success';
+  }
+
+  // ── Hapus Draft ───────────────────────────────────────────
+  async function psHapusDraft(psId, noPicking) {
+    const targetId  = psId || currentDraftId;
+    const targetNo  = noPicking || (psDraftNoSpan && psDraftNoSpan.textContent) || '';
+    if (!targetId) return;
+    if (!confirm(`Hapus draft ${targetNo}? Semua karung akan dilepas dari lock.`)) return;
+
+    psStatusMessage.textContent = 'Menghapus draft...';
+    psStatusMessage.className   = 'status';
+
+    const { error } = await sb.rpc('fn_delete_draft_picking_slip', { p_ps_id: targetId });
+    if (error) {
+      psStatusMessage.textContent = 'Gagal hapus draft: ' + (error.message || '');
+      psStatusMessage.className   = 'status error'; return;
+    }
+
+    // Reset form
+    psDetails = [];
+    psRenderDetailTable();
+    psExitDraftMode();
+    if (psDraftBanner) psDraftBanner.style.display = 'none';
+    if (psNamaCustomerInput) psNamaCustomerInput.value = '';
+    if (psNoSoInput)         psNoSoInput.value          = '';
+    if (psCatatanInput)      psCatatanInput.value        = '';
+    psStatusMessage.textContent = `Draft ${targetNo} dihapus. Karung sudah dilepas.`;
+    psStatusMessage.className   = 'status success';
+    // Reload banner (mungkin masih ada draft lain)
+    await psLoadUserDrafts();
+  }
+
+  // ── Submit / Post Draft ───────────────────────────────────
+  async function psPostDraft() {
+    if (!currentDraftId) {
+      psStatusMessage.textContent = 'Tidak ada draft aktif. Simpan draft terlebih dahulu.';
+      psStatusMessage.className   = 'status error'; return;
+    }
+    if (!confirm(`Submit picking slip ${psDraftNoSpan ? psDraftNoSpan.textContent : ''}?\nStok karung akan langsung diupdate.`)) return;
+
+    // Buka window SEBELUM await agar tidak diblokir popup blocker
+    const _submitWin = window.open('', '_blank', 'width=800,height=900');
+    if (!_submitWin) { alert('Popup diblokir browser. Izinkan popup lalu coba lagi.'); return; }
+    _submitWin.document.write('<p style="font-family:sans-serif;padding:20px">Memproses picking slip...</p>');
+
+    psStatusMessage.textContent = 'Memproses picking slip...';
+    psStatusMessage.className   = 'status';
+    if (psBtnSubmit) psBtnSubmit.disabled = true;
+
+    const { data, error } = await sb.rpc('fn_post_draft_picking_slip', { p_ps_id: currentDraftId });
+
+    if (error) {
+      if (psBtnSubmit) psBtnSubmit.disabled = false;
+      if (_submitWin && !_submitWin.closed) _submitWin.close();
+      psStatusMessage.textContent = 'Gagal submit: ' + (error.message || '');
+      psStatusMessage.className   = 'status error'; return;
+    }
+
+    const noDoc = data && data.no_picking_slip ? data.no_picking_slip : '(tanpa nomor)';
+    psStatusMessage.textContent = `✅ Picking slip ${noDoc} berhasil disubmit! Stok sudah diupdate.`;
+    psStatusMessage.className   = 'status success';
+
+    // Buka window print dengan data yang ada di psDetails
+    const headerForPrint = {
+      tgl_picking:    psTglPickingInput ? psTglPickingInput.value : null,
+      tujuan:         psTujuanSelect ? psTujuanSelect.value : '',
+      nama_customer:  psNamaCustomerInput ? psNamaCustomerInput.value.trim() : null,
+      no_so:          psNoSoInput ? psNoSoInput.value.trim() : null,
+      gudang_tujuan:  psGudangSelect ? psGudangSelect.value : null,
+      catatan:        psCatatanInput ? psCatatanInput.value.trim() : null
+    };
+    writePickingSlipToWindow(_submitWin, noDoc, headerForPrint, psDetails);
+
+    // Reset form setelah berhasil
+    psDetails = [];
+    psRenderDetailTable();
+    psExitDraftMode();
+    if (psNamaCustomerInput) psNamaCustomerInput.value = '';
+    if (psNoSoInput)         psNoSoInput.value          = '';
+    if (psCatatanInput)      psCatatanInput.value        = '';
+    if (psBtnSubmit)         psBtnSubmit.disabled        = true;
+  }
 
   async function initPickingSlipOnce() {
     if (pickingSlipInitialized) return;
@@ -6609,6 +8395,9 @@ try {
       const offsetMs = now.getTime() - now.getTimezoneOffset() * 60000;
       psTglPickingInput.valueAsNumber = offsetMs;
     }
+
+    // Cek draft yang ada milik user ini
+    await psLoadUserDrafts();
 
     // muat master_gudang untuk tujuan pindah_lokasi
     if (psGudangSelect) {
@@ -6707,15 +8496,38 @@ try {
       });
     }
 
+    if (psBtnSaveDraft) {
+      psBtnSaveDraft.addEventListener('click', psSaveDraft);
+    }
     if (psBtnSubmit) {
-      psBtnSubmit.addEventListener('click', psSubmitPickingSlip);
+      psBtnSubmit.addEventListener('click', psPostDraft);
+    }
+    if (psBtnHapusDraft) {
+      psBtnHapusDraft.addEventListener('click', () => psHapusDraft(null, null));
+    }
+    if (psBtnNewPS) {
+      psBtnNewPS.addEventListener('click', async () => {
+        if (!confirm('Draft saat ini akan tetap tersimpan.\nForm akan direset untuk membuat Picking Slip baru. Lanjutkan?')) return;
+        await psResetFormForNew();
+      });
     }
     if (psBtnClear) {
       psBtnClear.addEventListener('click', () => {
+        if (psDraftMode) {
+          psStatusMessage.textContent = 'Dalam mode draft — gunakan "Hapus Draft" untuk membatalkan, atau tambah karung untuk melanjutkan.';
+          psStatusMessage.className   = 'status';
+          return;
+        }
         psDetails = [];
         psRenderDetailTable();
         psStatusMessage.textContent = '';
-        psStatusMessag
+        psStatusMessage.className   = 'status';
+        if (psNamaCustomerInput) psNamaCustomerInput.value = '';
+        if (psNoSoInput)         psNoSoInput.value          = '';
+        if (psCatatanInput)      psCatatanInput.value        = '';
+      });
+    }
+  } // tutup initPickingSlipOnce
 
   // ============== RIWAYAT PICKING SLIP (CARI / PRINT ULANG / DELETE) ==============
   const rpsUserInfoEl  = document.getElementById('rps-userInfo');
@@ -6764,6 +8576,9 @@ try {
   }
 
   async function rpsLoadAndPrint(pickingSlipId) {
+    const _printWin = window.open('', '_blank', 'width=800,height=900');
+    if (!_printWin) { rpsSetStatus('Popup diblokir browser. Izinkan popup lalu coba lagi.', 'error'); return; }
+    _printWin.document.write('<p style="font-family:sans-serif;padding:20px">Memuat data...</p>');
     rpsSetStatus('Mengambil data picking slip...', '');
     // 1) header
     const { data: hdr, error: hdrErr } = await sb
@@ -6828,7 +8643,7 @@ try {
     };
 
     rpsSetStatus('');
-    openPickingSlipWindow(hdr.no_picking_slip || '(tanpa nomor)', header, detail);
+    writePickingSlipToWindow(_printWin, hdr.no_picking_slip || '(tanpa nomor)', header, detail);
   }
 
   function rpsRenderRows(rows, totalsMap) {
@@ -6946,11 +8761,6 @@ try {
 
 
 
-e.className = 'status';
-      });
-    }
-  }
-
 
   
   // ===== Global WebAudio Beep (reusable AudioContext) =====
@@ -7044,7 +8854,7 @@ function psBeep(kind) {
 
     const { data: karung, error } = await sb
       .from('stok_karung')
-      .select('karung_id, item_id, status_karung, qty_ekor_sisa, qty_kg_sisa')
+      .select('karung_id, item_id, status_karung, qty_ekor_sisa, qty_kg_sisa, ps_draft_id')
       .eq('karung_id', raw)
       .maybeSingle();
 
@@ -7063,10 +8873,17 @@ function psBeep(kind) {
       return;
     }
 
+    // Cek apakah karung dikunci draft lain
+    if (karung.ps_draft_id && karung.ps_draft_id !== currentDraftId) {
+      psSearchStatus.textContent = `Karung ${raw} sedang terkunci oleh draft picking slip lain. Tunggu draft tersebut selesai atau dihapus.`;
+      psSearchStatus.className = 'status error';
+      psBeep('err');
+      return;
+    }
 
-    // Draft hanya untuk Receipt Slip (tidak boleh dipakai transaksi lain)
-    if (karung.status_karung === 'draft') {
-      psSearchStatus.textContent = `Karung ${raw} masih draft. Terima dulu lewat Receipt Slip.`;
+    // Draft status = masih dalam penerimaan barang (receipt slip draft)
+    if (karung.status_karung === 'draft' && !karung.ps_draft_id) {
+      psSearchStatus.textContent = `Karung ${raw} masih draft penerimaan. Terima dulu lewat Receipt Slip.`;
       psSearchStatus.className = 'status error';
       psBeep('err');
       return;
@@ -7089,19 +8906,44 @@ function psBeep(kind) {
       return;
     }
 
-    // ambil nama item (opsional)
+    // Ambil nama item
     let itemName = '';
     if (karung.item_id) {
       const { data: item, error: itemError } = await sb
-        .from('items')
-        .select('item_name')
-        .eq('item_id', karung.item_id)
-        .maybeSingle();
-      if (!itemError && item) {
-        itemName = item.item_name;
-      }
+        .from('items').select('item_name').eq('item_id', karung.item_id).maybeSingle();
+      if (!itemError && item) itemName = item.item_name;
     }
 
+    // MODE DRAFT AKTIF → langsung panggil API fn_add_karung_to_draft
+    if (psDraftMode && currentDraftId) {
+      psSearchStatus.textContent = 'Menambahkan karung ke draft...';
+      const { data: addResult, error: addErr } = await sb.rpc('fn_add_karung_to_draft', {
+        p_ps_id:    currentDraftId,
+        p_karung_id: raw,
+        p_qty_ekor:  sisaEkor,
+        p_qty_kg:    sisaKg
+      });
+      if (addErr) {
+        psSearchStatus.textContent = 'Gagal tambah karung: ' + (addErr.message || '');
+        psSearchStatus.className = 'status error';
+        psBeep('err');
+        return;
+      }
+      psDetails.push({
+        karung_id: karung.karung_id, item_id: karung.item_id, item_name: itemName,
+        qty_ekor_sisa: sisaEkor, qty_kg_sisa: sisaKg,
+        qty_ekor_keluar: sisaEkor, qty_kg_keluar: sisaKg
+      });
+      psKarungSearchInput.value = '';
+      psKarungSearchInput.focus();
+      psBeep('ok');
+      psSearchStatus.textContent = `Karung ${raw} ditambahkan ke draft dan dikunci.`;
+      psSearchStatus.className = 'status success';
+      psRenderDetailTable();
+      return;
+    }
+
+    // MODE LOKAL (belum ada draft) → tambah ke psDetails saja
     psDetails.push({
       karung_id: karung.karung_id,
       item_id: karung.item_id,
@@ -7113,10 +8955,10 @@ function psBeep(kind) {
     });
 
     psKarungSearchInput.value = '';
-    psKarungSearchInput.focus();   // <— tambahkan ini
+    psKarungSearchInput.focus();
     psBeep('ok');
 
-    psSearchStatus.textContent = 'Karung ditambahkan ke daftar.';
+    psSearchStatus.textContent = 'Karung ditambahkan ke daftar (belum dikunci, Simpan Draft dulu).';
     psSearchStatus.className = 'status success';
 
     psRenderDetailTable();
@@ -7198,9 +9040,25 @@ function psBeep(kind) {
       btnHapus.type = 'button';
       btnHapus.textContent = 'Hapus';
       btnHapus.className = 'btn btn-ghost btn-small';
-      btnHapus.addEventListener('click', () => {
+      btnHapus.addEventListener('click', async () => {
         const kid = row.karung_id || '';
         if (!confirm(`Hapus karung ${kid} dari daftar?`)) return;
+
+        // MODE DRAFT → hapus via API (unlock karung di DB)
+        if (psDraftMode && currentDraftId) {
+          btnHapus.disabled = true;
+          btnHapus.textContent = '...';
+          const { error } = await sb.rpc('fn_remove_karung_from_draft', {
+            p_ps_id: currentDraftId, p_karung_id: kid
+          });
+          if (error) {
+            alert('Gagal hapus karung dari draft: ' + (error.message || ''));
+            btnHapus.disabled = false;
+            btnHapus.textContent = 'Hapus';
+            return;
+          }
+        }
+
         psDetails.splice(index, 1);
         psRenderDetailTable();
         if (psKarungSearchInput) psKarungSearchInput.focus();
@@ -7224,87 +9082,9 @@ function psBeep(kind) {
     psSummaryBox.style.display = 'block';
   }
 
-  async function psSubmitPickingSlip() {
-    psStatusMessage.textContent = '';
-    psStatusMessage.className = 'status';
-
-    if (!psDetails.length) {
-      psStatusMessage.textContent = 'Tambahkan minimal 1 karung sebelum submit.';
-      psStatusMessage.className = 'status error';
-      return;
-    }
-
-    const tujuan       = psTujuanSelect ? psTujuanSelect.value : '';
-    const tglPicking   = psTglPickingInput ? psTglPickingInput.value : null;
-    const namaCustomer = psNamaCustomerInput ? psNamaCustomerInput.value.trim() : '';
-    const noSo         = psNoSoInput ? psNoSoInput.value.trim() : '';
-    const gudangTujuan = psGudangSelect ? psGudangSelect.value : '';
-    const catatan      = psCatatanInput ? psCatatanInput.value.trim() : '';
-
-    if (!tujuan) {
-      psStatusMessage.textContent = 'Tujuan wajib dipilih.';
-      psStatusMessage.className = 'status error';
-      return;
-    }
-    if (tujuan === 'jual' && !namaCustomer) {
-      psStatusMessage.textContent = 'Nama customer wajib diisi untuk tujuan JUAL.';
-      psStatusMessage.className = 'status error';
-      return;
-    }
-    if (tujuan === 'pindah_lokasi' && !gudangTujuan) {
-      psStatusMessage.textContent = 'Gudang tujuan wajib dipilih untuk PINDAH LOKASI.';
-      psStatusMessage.className = 'status error';
-      return;
-    }
-
-    const detailPayload = psDetails.map(row => ({
-      karung_id: row.karung_id,
-      item_id: row.item_id,
-      qty_ekor_keluar: row.qty_ekor_keluar,
-      qty_kg_keluar: row.qty_kg_keluar,
-      keterangan: null
-    }));
-
-    const payload = {
-      header: {
-        tgl_picking: tglPicking || null,
-        tujuan,
-        nama_customer: namaCustomer || null,
-        no_so: noSo || null,
-        gudang_tujuan: gudangTujuan || null,
-        catatan: catatan || null
-      },
-      detail: detailPayload
-    };
-
-    psStatusMessage.textContent = 'Menyimpan picking slip...';
-    psStatusMessage.className = 'status';
-
-    const { data, error } = await sb
-      .rpc('fn_submit_picking_slip', { payload });
-
-    if (error) {
-      console.error(error);
-      psStatusMessage.textContent = 'Gagal menyimpan picking slip: ' + (error.message || '');
-      psStatusMessage.className = 'status error';
-      return;
-    }
-
-    const noDoc = data && data.no_picking_slip ? data.no_picking_slip : '(tanpa nomor)';
-    psStatusMessage.textContent = `Picking slip berhasil disimpan: ${noDoc}`;
-    psStatusMessage.className = 'status success';
-
-    openPickingSlipWindow(noDoc, payload.header, psDetails);
-
-    // reset detail, tapi biarkan tanggal & tujuan tetap
-    psDetails = [];
-    psRenderDetailTable();
-
-    if (psNamaCustomerInput) psNamaCustomerInput.value = '';
-    if (psNoSoInput) psNoSoInput.value = '';
-    if (psCatatanInput) psCatatanInput.value = '';
-
-  }
+  // psSubmitPickingSlip DEPRECATED — digantikan psSaveDraft + psPostDraft
+  // Fungsi lama dihapus. Jika ada referensi lain ke fn_submit_picking_slip,
+  // masih bisa dipakai terpisah di revisi atau tool lain.
   // ============== LAPORAN STOK PER ITEM & PALLET ==============
 
   const lsUserInfoEl     = document.getElementById('ls-userInfo');
@@ -9169,9 +10949,22 @@ function openPickingSlipWindow(noDoc, header, detail) {
 `;
 
   const win = window.open("", "_blank", "width=800,height=900");
+  if (!win) { alert('Popup diblokir browser. Izinkan popup untuk halaman ini lalu coba lagi.'); return; }
   win.document.write(slipHTML);
   win.document.close();
   win.focus();
+}
+
+// Versi dengan pre-opened window (hindari popup blocker setelah await)
+function writePickingSlipToWindow(win, noDoc, header, detail) {
+  if (!win || win.closed) { openPickingSlipWindow(noDoc, header, detail); return; }
+  // Delegate ke fungsi utama dengan win sudah terbuka — tidak bisa langsung karena win.open sudah dilakukan
+  // Rebuild HTML dan tulis ke win yang sudah ada
+  // (Re-use logic: panggil openPickingSlipWindow tapi intercept window.open)
+  const _origOpen = window.open;
+  window.open = () => win;
+  openPickingSlipWindow(noDoc, header, detail);
+  window.open = _origOpen;
 }
 
 
@@ -9766,6 +11559,9 @@ function openPickingSlipWindow(noDoc, header, detail) {
   const lmSummaryEl    = document.getElementById('lm-summary');
   const lmTableEl      = document.getElementById('lm-table');
   const lmTbodyEl      = document.getElementById('lm-tbody');
+  const lmTfootEl      = document.getElementById('lm-tfoot');
+  const lmBtnExportEl  = document.getElementById('lm-btn-export');
+  let   lmLastRows     = [];   // simpan data terakhir untuk export
 
   function lmSetStatus(msg, type='') {
     if (!lmStatusEl) return;
@@ -9775,8 +11571,8 @@ function openPickingSlipWindow(noDoc, header, detail) {
 
   function lmKg2(n) {
     const v = Number(n ?? 0);
-    if (!Number.isFinite(v)) return '0.00';
-    return v.toFixed(2);
+    if (!Number.isFinite(v)) return (0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    return v.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }
 
   async function initLaporanMutasiOnce() {
@@ -9801,6 +11597,9 @@ function openPickingSlipWindow(noDoc, header, detail) {
     if (lmBtnTampilEl) {
       lmBtnTampilEl.addEventListener('click', tampilkanLaporanMutasi);
     }
+    if (lmBtnExportEl) {
+      lmBtnExportEl.addEventListener('click', lmExportExcel);
+    }
   }
 
   async function tampilkanLaporanMutasi() {
@@ -9808,7 +11607,9 @@ function openPickingSlipWindow(noDoc, header, detail) {
 
     lmSetStatus('', '');
     lmTbodyEl.innerHTML = '';
+    if (lmTfootEl) lmTfootEl.innerHTML = '';
     lmTableEl.style.display = 'none';
+    if (lmBtnExportEl) lmBtnExportEl.style.display = 'none';
     if (lmSummaryEl) {
       lmSummaryEl.style.display = 'none';
       lmSummaryEl.textContent = '';
@@ -9839,6 +11640,7 @@ function openPickingSlipWindow(noDoc, header, detail) {
     }
 
     const rows = Array.isArray(data) ? data : [];
+    lmLastRows = rows;
     if (rows.length === 0) {
       lmSetStatus('Tidak ada data untuk rentang tanggal ini.', '');
       return;
@@ -9937,7 +11739,7 @@ function openPickingSlipWindow(noDoc, header, detail) {
         const td = document.createElement('td');
         const v = r[key];
         td.textContent = isInt
-          ? (Number(v ?? 0)).toLocaleString('id-ID')
+          ? (Number(v ?? 0)).toLocaleString()
           : lmKg2(v);
         tr.appendChild(td);
       });
@@ -9945,17 +11747,114 @@ function openPickingSlipWindow(noDoc, header, detail) {
       lmTbodyEl.appendChild(tr);
     });
 
+    // Render tfoot (baris total)
+    if (lmTfootEl) {
+      const tfCells = [
+        ['saldo_awal_ekor', true], ['saldo_awal_kg', false],
+        ['awal_ekor', true], ['awal_kg', false],
+        ['abf_ekor', true], ['abf_kg', false],
+        ['dari_lokasi_lain_ekor', true], ['dari_lokasi_lain_kg', false],
+        ['chiller_ekor', true], ['chiller_kg', false],
+        ['retur_ekor', true], ['retur_kg', false],
+        ['jual_ekor', true], ['jual_kg', false],
+        ['pindah_lokasi_ekor', true], ['pindah_lokasi_kg', false],
+        ['reprocess_ekor', true], ['reprocess_kg', false],
+        ['selisih_ekor', true], ['selisih_kg', false],
+        ['rusak_ekor', true], ['rusak_kg', false],
+        ['digabung_ekor', true], ['digabung_kg', false],
+        ['gabungan_ekor', true], ['gabungan_kg', false],
+        ['saldo_akhir_ekor', true], ['saldo_akhir_kg', false]
+      ];
+      const tfTr = document.createElement('tr');
+      tfTr.style.cssText = 'font-weight:700; background:#f0f9ff; border-top:2px solid #93c5fd;';
+      const tdLabel = document.createElement('td');
+      tdLabel.textContent = 'TOTAL';
+      tdLabel.style.cssText = 'font-weight:700; color:#1d4ed8;';
+      tfTr.appendChild(tdLabel);
+      tfCells.forEach(([key, isInt]) => {
+        const td = document.createElement('td');
+        td.textContent = isInt
+          ? Number(totals[key]).toLocaleString()
+          : lmKg2(totals[key]);
+        td.style.cssText = 'font-weight:700; color:#1d4ed8;';
+        tfTr.appendChild(td);
+      });
+      lmTfootEl.appendChild(tfTr);
+    }
+
     // Summary
     if (lmSummaryEl) {
       lmSummaryEl.style.display = 'block';
       lmSummaryEl.textContent =
         `Rentang: ${dFrom} s/d ${dTo}. Total Saldo Awal: ` +
-        `${Number(totals.saldo_awal_ekor).toLocaleString('id-ID')} ekor | ${lmKg2(totals.saldo_awal_kg)} kg. ` +
-        `Total Saldo Akhir: ${Number(totals.saldo_akhir_ekor).toLocaleString('id-ID')} ekor | ${lmKg2(totals.saldo_akhir_kg)} kg.`;
+        `${Number(totals.saldo_awal_ekor).toLocaleString()} ekor | ${lmKg2(totals.saldo_awal_kg)} kg. ` +
+        `Total Saldo Akhir: ${Number(totals.saldo_akhir_ekor).toLocaleString()} ekor | ${lmKg2(totals.saldo_akhir_kg)} kg.`;
     }
 
     lmTableEl.style.display = 'table';
-    lmSetStatus(`Sukses: ${rows.length.toLocaleString('id-ID')} item.`, 'success');
+    if (lmBtnExportEl) lmBtnExportEl.style.display = '';
+    lmSetStatus(`Sukses: ${rows.length.toLocaleString()} item.`, 'success');
+  }
+
+  // Export Excel laporan mutasi
+  function lmExportExcel() {
+    if (!lmLastRows || lmLastRows.length === 0) return;
+    const dFrom = lmDateFromEl ? lmDateFromEl.value : '';
+    const dTo   = lmDateToEl   ? lmDateToEl.value   : '';
+
+    const headers = [
+      'Item',
+      'Saldo Awal (Ekor)', 'Saldo Awal (Kg)',
+      'awal (Ekor)', 'awal (Kg)',
+      'abf (Ekor)', 'abf (Kg)',
+      'dari_lokasi_lain (Ekor)', 'dari_lokasi_lain (Kg)',
+      'chiller (Ekor)', 'chiller (Kg)',
+      'retur (Ekor)', 'retur (Kg)',
+      'jual (Ekor)', 'jual (Kg)',
+      'pindah_lokasi (Ekor)', 'pindah_lokasi (Kg)',
+      'reprocess (Ekor)', 'reprocess (Kg)',
+      'selisih (Ekor)', 'selisih (Kg)',
+      'rusak (Ekor)', 'rusak (Kg)',
+      'digabung (Ekor)', 'digabung (Kg)',
+      'gabungan (Ekor)', 'gabungan (Kg)',
+      'Saldo Akhir (Ekor)', 'Saldo Akhir (Kg)'
+    ];
+
+    const dataRows = lmLastRows.map(r => [
+      r.item_name || r.item_id || '-',
+      Number(r.saldo_awal_ekor ?? 0),  Number(r.saldo_awal_kg ?? 0),
+      Number(r.awal_ekor ?? 0),         Number(r.awal_kg ?? 0),
+      Number(r.abf_ekor ?? 0),          Number(r.abf_kg ?? 0),
+      Number(r.dari_lokasi_lain_ekor ?? 0), Number(r.dari_lokasi_lain_kg ?? 0),
+      Number(r.chiller_ekor ?? 0),      Number(r.chiller_kg ?? 0),
+      Number(r.retur_ekor ?? 0),        Number(r.retur_kg ?? 0),
+      Number(r.jual_ekor ?? 0),         Number(r.jual_kg ?? 0),
+      Number(r.pindah_lokasi_ekor ?? 0), Number(r.pindah_lokasi_kg ?? 0),
+      Number(r.reprocess_ekor ?? 0),    Number(r.reprocess_kg ?? 0),
+      Number(r.selisih_ekor ?? 0),      Number(r.selisih_kg ?? 0),
+      Number(r.rusak_ekor ?? 0),        Number(r.rusak_kg ?? 0),
+      Number(r.digabung_ekor ?? 0),     Number(r.digabung_kg ?? 0),
+      Number(r.gabungan_ekor ?? 0),     Number(r.gabungan_kg ?? 0),
+      Number(r.saldo_akhir_ekor ?? 0),  Number(r.saldo_akhir_kg ?? 0)
+    ]);
+
+    // Hitung baris total
+    const totalsRow = ['TOTAL'];
+    for (let col = 1; col < headers.length; col++) {
+      totalsRow.push(dataRows.reduce((sum, row) => sum + (Number(row[col]) || 0), 0));
+    }
+
+    const wsData = [headers, ...dataRows, totalsRow];
+    const ws = XLSX.utils.aoa_to_sheet(wsData);
+
+    // Style lebar kolom
+    ws['!cols'] = headers.map((h, i) => ({ wch: i === 0 ? 28 : 16 }));
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Mutasi');
+
+    const fileName = `Laporan_Mutasi_${dFrom}_sd_${dTo}.xlsx`;
+    XLSX.writeFile(wb, fileName);
   }
 
 
@@ -10576,5 +12475,94 @@ function openPickingSlipWindow(noDoc, header, detail) {
 
 
 </script>
+
+<!-- ═══ REVISI PICKING SLIP — MODALS ═══ -->
+
+<!-- EDIT QTY MODAL -->
+<div class="rvps-modal-overlay" id="rvps-edit-qty-overlay">
+  <div class="rvps-modal-box">
+    <h3>✏️ Edit Qty Baris</h3>
+    <div class="rvps-modal-sub" id="rvps-eq-sub">Karung: –</div>
+    <div class="rvps-form-grid">
+      <div class="rvps-field-group">
+        <label>Qty Ekor Keluar *</label>
+        <input type="number" id="rvps-eq-qty-ekor" min="1" step="1" />
+        <span class="rvps-field-note" id="rvps-eq-note-ekor"></span>
+      </div>
+      <div class="rvps-field-group">
+        <label>Qty KG Keluar *</label>
+        <input type="number" id="rvps-eq-qty-kg" min="0.01" step="0.01" />
+        <span class="rvps-field-note" id="rvps-eq-note-kg"></span>
+      </div>
+      <div class="rvps-field-group rvps-field-full">
+        <label>Alasan Revisi *</label>
+        <input type="text" id="rvps-eq-alasan" placeholder="Jelaskan alasan perubahan qty..." />
+      </div>
+    </div>
+    <div id="rvps-eq-status" class="rvps-msg" style="margin-top:10px"></div>
+    <div class="rvps-btn-row" style="margin-top:14px">
+      <button class="btn btn-success" id="rvps-btn-eq-save">💾 Simpan</button>
+      <button class="btn btn-ghost" id="rvps-btn-eq-cancel">Batal</button>
+    </div>
+  </div>
+</div>
+
+<!-- CONFIRM OVERLAY -->
+<div class="rvps-modal-overlay" id="rvps-confirm-overlay">
+  <div class="rvps-confirm-box">
+    <h3 id="rvps-confirm-title">Konfirmasi</h3>
+    <p id="rvps-confirm-msg">Apakah Anda yakin?</p>
+    <div class="rvps-btn-row">
+      <button class="btn btn-ghost" id="rvps-btn-confirm-no">Batal</button>
+      <button class="btn btn-danger" id="rvps-btn-confirm-yes">Ya, Lanjutkan</button>
+    </div>
+  </div>
+</div>
+
+<!-- PIN MODAL -->
+<div class="rvps-modal-overlay" id="rvps-pin-overlay">
+  <div class="rvps-modal-box">
+    <h3>🔒 Verifikasi PIN Supervisor</h3>
+    <div class="rvps-modal-sub">Masukkan PIN supervisor Anda untuk melanjutkan aksi ini.</div>
+    <div class="rvps-form-grid">
+      <div class="rvps-field-group rvps-field-full">
+        <label>PIN Supervisor</label>
+        <input type="password" id="rvps-pin-input" placeholder="••••" maxlength="20"
+               style="font-size:20px; letter-spacing:6px; text-align:center;" />
+      </div>
+    </div>
+    <div id="rvps-pin-status" class="rvps-msg" style="margin-top:8px;"></div>
+    <div class="rvps-btn-row" style="margin-top:14px;">
+      <button class="btn btn-success" id="rvps-btn-pin-confirm">✅ Konfirmasi</button>
+      <button class="btn btn-ghost"   id="rvps-btn-pin-cancel">Batal</button>
+    </div>
+  </div>
+</div>
+
+<!-- SET PIN MODAL -->
+<div class="rvps-modal-overlay" id="rvps-setpin-overlay">
+  <div class="rvps-modal-box">
+    <h3>🔑 Set PIN Supervisor</h3>
+    <div class="rvps-modal-sub">Anda belum memiliki PIN. Set PIN terlebih dahulu untuk bisa melakukan revisi.</div>
+    <div class="rvps-form-grid">
+      <div class="rvps-field-group rvps-field-full">
+        <label>PIN Baru (min. 4 karakter)</label>
+        <input type="password" id="rvps-setpin-new" placeholder="••••" maxlength="20"
+               style="font-size:20px; letter-spacing:6px; text-align:center;" />
+      </div>
+      <div class="rvps-field-group rvps-field-full">
+        <label>Ulangi PIN</label>
+        <input type="password" id="rvps-setpin-confirm" placeholder="••••" maxlength="20"
+               style="font-size:20px; letter-spacing:6px; text-align:center;" />
+      </div>
+    </div>
+    <div id="rvps-setpin-status" class="rvps-msg" style="margin-top:8px;"></div>
+    <div class="rvps-btn-row" style="margin-top:14px;">
+      <button class="btn btn-success" id="rvps-btn-setpin-save">💾 Simpan PIN</button>
+      <button class="btn btn-ghost"   id="rvps-btn-setpin-cancel">Batal</button>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>
