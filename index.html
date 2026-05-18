@@ -5803,7 +5803,8 @@ bdStatus.textContent = 'Form dikosongkan.';
   let currentReceiptId = null;
   let currentReceiptNo = null;
   let receiptStatus = 'draft';
-  let receiptLines = []; // {line_id, karung_id_input, item_id, item_name, qty_ekor, qty_kg, tgl_produksi}
+  let receiptLines = []; // {_tempId, line_id, karung_id_input, item_id, item_name, qty_ekor, qty_kg, tgl_produksi}
+  let rsTempLineCounter = 0; // counter untuk _tempId — dipakai baik oleh local lines maupun DB lines
 
   const BEEP_OK_SRC  = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAIlYAAESsAAACABAAZGF0YQAAAAA="; // tiny silent-ish (fallback)
   const beepOk = new Audio(BEEP_OK_SRC);
@@ -5873,10 +5874,10 @@ bdStatus.textContent = 'Form dikosongkan.';
         <td>${idx+1}</td>
         <td><code>${escapeHtml(l.karung_id_input || '')}</code></td>
         <td>${escapeHtml(l.item_name || '')}</td>
-        <td><input type="number" min="0" step="1" value="${l.qty_ekor ?? ''}" data-line-id="${l.line_id}" data-field="qty_ekor" class="rs-edit" style="width:80px;"></td>
-        <td><input type="number" min="0" step="0.1" value="${l.qty_kg ?? ''}" data-line-id="${l.line_id}" data-field="qty_kg" class="rs-edit" style="width:95px;"></td>
+        <td><input type="number" min="0" step="1" value="${l.qty_ekor ?? ''}" data-temp-id="${l._tempId}" data-field="qty_ekor" class="rs-edit" style="width:80px;"></td>
+        <td><input type="number" min="0" step="0.1" value="${l.qty_kg ?? ''}" data-temp-id="${l._tempId}" data-field="qty_kg" class="rs-edit" style="width:95px;"></td>
         <td>${escapeHtml(l.tgl_produksi || '')}</td>
-        <td><button class="btn-small btn-ghost rs-remove" data-line-id="${l.line_id}">Hapus</button></td>
+        <td><button class="btn-small btn-ghost rs-remove" data-temp-id="${l._tempId}">Hapus</button></td>
       `;
       tbody.appendChild(tr);
     });
@@ -5884,9 +5885,9 @@ bdStatus.textContent = 'Form dikosongkan.';
     // attach listeners
     tbody.querySelectorAll('.rs-remove').forEach(btn => {
       btn.addEventListener('click', async () => {
-        const lineId = Number(btn.dataset.lineId);
+        const tempId = btn.dataset.tempId;
         if (!confirm('Hapus baris ini?')) return;
-        await rsRemoveLine(lineId);
+        await rsRemoveLine(tempId);
       });
     });
 
@@ -5896,9 +5897,9 @@ bdStatus.textContent = 'Form dikosongkan.';
       inp.addEventListener('input', () => {
         if (debounceTimer) clearTimeout(debounceTimer);
         debounceTimer = setTimeout(async () => {
-          const lineId = Number(inp.dataset.lineId);
+          const tempId = inp.dataset.tempId;
           const field = inp.dataset.field;
-          const row = receiptLines.find(x => Number(x.line_id) === lineId);
+          const row = receiptLines.find(x => x._tempId === tempId);
           if (!row) return;
 
           const newVal = inp.value;
@@ -5912,7 +5913,7 @@ bdStatus.textContent = 'Form dikosongkan.';
             row.qty_kg = v;
           }
           rsCalcSummary();
-          await rsUpdateLine(lineId, row.qty_ekor, row.qty_kg);
+          await rsUpdateLine(tempId, row.qty_ekor, row.qty_kg);
         }, 600);
       });
     });
@@ -5952,6 +5953,7 @@ bdStatus.textContent = 'Form dikosongkan.';
     }
     receiptLines = (lines||[]).map(l => ({
       ...l,
+      _tempId: String(++rsTempLineCounter),
       item_name: itemMap[l.item_id] || l.item_id
     }));
     rsRenderTable();
@@ -5963,6 +5965,72 @@ bdStatus.textContent = 'Form dikosongkan.';
   async function rsSaveHeader() {
     // no-op (UI only)
     return;
+  }
+
+  // rsSaveDraftToDB — buat draft di DB + insert semua line lokal
+  // Dipanggil oleh tombol "Simpan Draft" dan secara implisit oleh "Post & Print" (jika draft belum ada).
+  async function rsSaveDraftToDB() {
+    if (currentReceiptId) return; // draft sudah ada, tidak perlu ulang
+    if (!receiptLines.length) {
+      throw new Error('Tambahkan minimal 1 karung sebelum menyimpan draft.');
+    }
+
+    // Simpan snapshot qty lokal yang mungkin sudah di-edit sebelum save
+    const localQtyMap = {};
+    const lineOrder = [];
+    for (const line of receiptLines) {
+      localQtyMap[line.karung_id_input] = {
+        qty_ekor: line.qty_ekor,
+        qty_kg: line.qty_kg
+      };
+      lineOrder.push(line.karung_id_input);
+    }
+
+    rsSetStatus('Membuat draft...', 'ok');
+    await rsCreateDraft(); // sets currentReceiptId + currentReceiptNo
+
+    // Insert semua line ke DB secara berurutan
+    for (const karungId of lineOrder) {
+      const { error } = await sb.rpc('fn_receipt_add_line', {
+        p_receipt_id: currentReceiptId,
+        p_karung_id: karungId
+      });
+      if (error) {
+        // Rollback: reset state agar user bisa coba ulang
+        currentReceiptId = null;
+        currentReceiptNo = null;
+        receiptStatus = 'draft';
+        rsRenderHeader();
+        throw new Error(`Gagal insert karung ${karungId}: ${error.message}`);
+      }
+    }
+
+    // Re-fetch untuk dapat line_id asli dari DB
+    await rsFetchLines(); // receiptLines sekarang berisi baris DB dengan _tempId baru
+
+    // Sinkron qty yang sudah di-edit user (fn_receipt_add_line mengisi dari stok_karung default)
+    const updates = [];
+    for (const line of receiptLines) {
+      const local = localQtyMap[line.karung_id_input];
+      if (!local || line.line_id == null) continue;
+      const dbEkor = Number(line.qty_ekor ?? 0);
+      const dbKg   = Number(line.qty_kg ?? 0);
+      const locEkor = Number(local.qty_ekor ?? 0);
+      const locKg   = Number(local.qty_kg ?? 0);
+      if (dbEkor !== locEkor || Math.abs(dbKg - locKg) > 0.001) {
+        updates.push({ line_id: line.line_id, qty_ekor: locEkor, qty_kg: locKg });
+      }
+    }
+    for (const u of updates) {
+      await sb.rpc('fn_receipt_update_line_qty', {
+        p_line_id: u.line_id,
+        p_qty_ekor: u.qty_ekor,
+        p_qty_kg: u.qty_kg
+      });
+    }
+    if (updates.length) await rsFetchLines(); // refresh setelah update qty
+
+    rsRenderHeader();
   }
 
   async function rsLookupKarung(karungId) {
@@ -5987,16 +6055,10 @@ bdStatus.textContent = 'Form dikosongkan.';
   }
 
   async function rsAddKarung(rawId) {
-    // Buat draft otomatis saat karung pertama ditambahkan
-    if (!currentReceiptId) {
-      await rsCreateDraft();
-      await rsFetchLines();
-    }
-
     const karungId = normalizeKarungId(rawId);
     if (!karungId) return;
 
-    // Prevent duplicate in UI quickly
+    // Prevent duplicate
     if (receiptLines.some(l => (l.karung_id_input || '') === karungId)) {
       rsSetStatus('Karung sudah ada di daftar', 'error');
       rsMaybeBeep(false);
@@ -6011,42 +6073,88 @@ bdStatus.textContent = 'Form dikosongkan.';
       return;
     }
 
-    const { data, error } = await sb.rpc('fn_receipt_add_line', {
-      p_receipt_id: currentReceiptId,
-      p_karung_id: karungId
-    });
-    if (error) {
-      rsSetStatus(error.message || 'Gagal tambah karung', 'error');
-      rsMaybeBeep(false);
-      return;
+    if (currentReceiptId) {
+      // Draft sudah ada di DB — langsung insert via RPC
+      const { data, error } = await sb.rpc('fn_receipt_add_line', {
+        p_receipt_id: currentReceiptId,
+        p_karung_id: karungId
+      });
+      if (error) {
+        rsSetStatus(error.message || 'Gagal tambah karung', 'error');
+        rsMaybeBeep(false);
+        return;
+      }
+      await rsFetchLines();
+    } else {
+      // Draft belum dibuat — buffer karung di memori lokal
+      let itemName = pre.sk.item_id;
+      try {
+        const { data: itemData } = await sb.from('items').select('item_name').eq('item_id', pre.sk.item_id).maybeSingle();
+        if (itemData) itemName = itemData.item_name || pre.sk.item_id;
+      } catch (e) {}
+
+      receiptLines.push({
+        _tempId: String(++rsTempLineCounter),
+        line_id: null,        // belum ada di DB
+        karung_id_input: karungId,
+        item_id: pre.sk.item_id,
+        item_name: itemName,
+        qty_ekor: Number(pre.sk.qty_ekor ?? 0),
+        qty_kg: Number(pre.sk.qty_kg ?? 0),
+        tgl_produksi: pre.sk.tgl_produksi || ''
+      });
+      rsRenderTable();
     }
 
     rsSetStatus('Karung ditambahkan', 'ok');
     rsMaybeBeep(true);
-    await rsFetchLines();
   }
 
-  async function rsUpdateLine(lineId, qtyEkor, qtyKg) {
-    const { error } = await sb.rpc('fn_receipt_update_line_qty', {
-      p_line_id: lineId,
-      p_qty_ekor: qtyEkor,
-      p_qty_kg: qtyKg
-    });
-    if (error) {
-      rsSetStatus(error.message || 'Gagal menyimpan baris', 'error');
-      rsMaybeBeep(false);
+  async function rsUpdateLine(tempId, qtyEkor, qtyKg) {
+    const line = receiptLines.find(l => l._tempId === tempId);
+    if (!line) return;
+    // Update local state selalu
+    line.qty_ekor = qtyEkor;
+    line.qty_kg = qtyKg;
+    rsCalcSummary();
+
+    if (line.line_id != null) {
+      // Sudah ada di DB — sinkron via RPC
+      const { error } = await sb.rpc('fn_receipt_update_line_qty', {
+        p_line_id: line.line_id,
+        p_qty_ekor: qtyEkor,
+        p_qty_kg: qtyKg
+      });
+      if (error) {
+        rsSetStatus(error.message || 'Gagal menyimpan baris', 'error');
+        rsMaybeBeep(false);
+      } else {
+        rsSetStatus('Perubahan tersimpan.', 'ok');
+      }
     } else {
-      rsSetStatus('Perubahan tersimpan.', 'ok');
+      // Masih lokal — cukup update di memory
+      rsSetStatus('Perubahan tersimpan (lokal, belum di-draft).', 'ok');
     }
   }
 
-  async function rsRemoveLine(lineId) {
-    const { error } = await sb.rpc('fn_receipt_remove_line', { p_line_id: lineId });
-    if (error) {
-      rsSetStatus(error.message || 'Gagal hapus baris', 'error');
-      return;
+  async function rsRemoveLine(tempId) {
+    const idx = receiptLines.findIndex(l => l._tempId === tempId);
+    if (idx < 0) { rsSetStatus('Baris tidak ditemukan', 'error'); return; }
+    const line = receiptLines[idx];
+
+    if (line.line_id != null) {
+      // Sudah ada di DB — hapus via RPC
+      const { error } = await sb.rpc('fn_receipt_remove_line', { p_line_id: line.line_id });
+      if (error) {
+        rsSetStatus(error.message || 'Gagal hapus baris', 'error');
+        return;
+      }
+      await rsFetchLines();
+    } else {
+      // Masih lokal — hapus dari array
+      receiptLines.splice(idx, 1);
+      rsRenderTable();
     }
-    await rsFetchLines();
     rsSetStatus('Baris dihapus.', 'ok');
   }
 
@@ -6074,6 +6182,17 @@ bdStatus.textContent = 'Form dikosongkan.';
       return;
     }
     if (!confirm('Posting Receipt Slip dan cetak laporan?')) return;
+
+    // Jika draft belum dibuat (user langsung klik Post tanpa Simpan Draft), buat sekarang
+    if (!currentReceiptId) {
+      rsSetStatus('Menyimpan draft sebelum posting...', 'ok');
+      try {
+        await rsSaveDraftToDB();
+      } catch(e) {
+        rsSetStatus(e.message || 'Gagal membuat draft sebelum posting', 'error');
+        return;
+      }
+    }
 
     // Kirim header dari UI pada saat posting (persist + post atomic via fn_receipt_post2)
     const tgl = document.getElementById('rs-tgl').value || null;
@@ -6128,7 +6247,7 @@ bdStatus.textContent = 'Form dikosongkan.';
 
 
   async function rsStartNewReceipt() {
-    // Reset UI + buat draft receipt baru (mirip UX picking slip)
+    // Reset UI + state lokal. Draft TIDAK dibuat otomatis — hanya terbentuk saat klik "Simpan Draft".
     rsSetStatus('', 'ok');
 
     // stop scanner if running
@@ -6136,7 +6255,6 @@ bdStatus.textContent = 'Form dikosongkan.';
       const closeBtn = document.getElementById('rs-close-scanner');
       const wrap = document.getElementById('rs-scanner-wrap');
       if (wrap && wrap.style.display !== 'none') {
-        // trigger existing close handler if any
         closeBtn && closeBtn.click();
       }
     } catch (e) {}
@@ -6165,36 +6283,17 @@ bdStatus.textContent = 'Form dikosongkan.';
     const karungInp = document.getElementById('rs-karung-input');
     if (karungInp) karungInp.value = '';
 
-    // reset local state
+    // reset local state (tidak ada DB call)
     receiptLines = [];
     receiptStatus = 'draft';
     currentReceiptId = null;
+    currentReceiptNo = null;
+    rsTempLineCounter = 0;
 
-    rsRenderLines();
+    rsRenderTable();
     rsRenderHeader();
-
-    // create new draft
-    function rsSetDisabled(disabled) {
-      const ids = ['rs-tgl','rs-sumber','rs-gudang-asal','rs-pelanggan','rs-catatan','rs-karung-input','rs-open-scanner','rs-post-print'];
-      ids.forEach(id => {
-        const el = document.getElementById(id);
-        if (el) el.disabled = !!disabled;
-      });
-    }
-    rsSetDisabled(true);
-
-    try {
-      await rsCreateDraft();
-      await rsFetchLines();
-      rsSetStatus('Receipt baru siap. Silakan scan karung.', 'ok');
-      rsSetDisabled(false);
-      try { await rsSaveHeader(); } catch (e) { console.warn('rsSaveHeader after new', e); }
-      try { karungInp && karungInp.focus(); } catch(e) {}
-    } catch (e) {
-      console.error(e);
-      rsSetStatus('Gagal membuat receipt baru. Cek koneksi/RLS.', 'error');
-      rsSetDisabled(false);
-    }
+    rsSetStatus('Receipt baru siap. Scan karung, lalu klik "Simpan Draft" untuk menyimpan.', 'ok');
+    try { karungInp && karungInp.focus(); } catch(e) {}
   }
 
   async function rsFetchHeaderForPrint() {
@@ -6393,9 +6492,8 @@ bdStatus.textContent = 'Form dikosongkan.';
 
     await rsLoadSumberMasukEnum();
 
-    // Draft receipt TIDAK dibuat otomatis saat halaman dibuka.
-    // Draft akan dibuat otomatis saat karung pertama ditambahkan (menghindari draft kosong terbentuk tanpa aksi user).
-    rsSetStatus('Siap. Scan/isi Karung ID lalu tekan Enter. Draft akan dibuat otomatis saat karung pertama ditambahkan.', 'ok');
+    // Draft TIDAK dibuat otomatis. Terbentuk hanya saat user klik "Simpan Draft" (atau implisit saat "Post & Print").
+    rsSetStatus('Siap. Scan/isi Karung ID lalu tekan Enter. Klik "Simpan Draft" untuk menyimpan ke database.', 'ok');
     rsSetDisabled(false);
 
     // header behavior
@@ -6441,8 +6539,17 @@ bdStatus.textContent = 'Form dikosongkan.';
     });
 
     document.getElementById('rs-save').addEventListener('click', async () => {
-      try { await rsSaveHeader(); rsSetStatus('Draft tersimpan.', 'ok'); }
-      catch(e) { rsSetStatus(e.message || 'Gagal simpan draft', 'error'); }
+      if (currentReceiptId) {
+        // Draft sudah ada — tidak perlu simpan ulang header (header disimpan saat Post)
+        rsSetStatus('Draft sudah tersimpan. Lanjutkan scan atau klik Post & Print.', 'ok');
+        return;
+      }
+      try {
+        await rsSaveDraftToDB();
+        rsSetStatus(`Draft tersimpan. No: ${currentReceiptNo || ''}`, 'ok');
+      } catch(e) {
+        rsSetStatus(e.message || 'Gagal simpan draft', 'error');
+      }
     });
 
     const rsNewBtn = document.getElementById('rs-new');
