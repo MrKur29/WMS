@@ -1769,6 +1769,23 @@
               </div>
               <div id="ps-search-status" class="status"></div>
 
+              <!-- REKAP BARANG -->
+              <div id="ps-rekap-wrap" style="display:none; margin-top:14px;">
+                <div class="section-title" style="margin-bottom:6px;">Rekap Barang</div>
+                <table class="rak-table" id="ps-rekap-table" style="margin-top:0;">
+                  <thead>
+                    <tr>
+                      <th style="text-align:left;">Jenis Barang</th>
+                      <th style="text-align:right;">Karung</th>
+                      <th style="text-align:right;">Ekor</th>
+                      <th style="text-align:right;">KG</th>
+                    </tr>
+                  </thead>
+                  <tbody id="ps-rekap-tbody"></tbody>
+                  <tfoot id="ps-rekap-tfoot"></tfoot>
+                </table>
+              </div>
+
               <!-- 3. TABEL DETAIL KARUNG -->
               <div class="section-title">3. Detail Karung</div>
               <div class="small-note">
@@ -8967,9 +8984,14 @@ function psBeep(kind) {
   function psRenderDetailTable() {
     psDetailTbody.innerHTML = '';
 
+    const psRekapWrap  = document.getElementById('ps-rekap-wrap');
+    const psRekapTbody = document.getElementById('ps-rekap-tbody');
+    const psRekapTfoot = document.getElementById('ps-rekap-tfoot');
+
     if (!psDetails.length) {
       psDetailTable.style.display = 'none';
       psSummaryBox.style.display = 'none';
+      if (psRekapWrap) psRekapWrap.style.display = 'none';
       return;
     }
 
@@ -9074,12 +9096,42 @@ function psBeep(kind) {
     });
 
     psDetailTable.style.display = 'table';
-    psSummaryBox.innerHTML = `
-      Jumlah karung: <strong>${totalKarung}</strong><br/>
-      Total diambil: <strong>${totalEkor}</strong> ekor /
-      <strong>${totalKg.toFixed(2)}</strong> kg
-    `;
-    psSummaryBox.style.display = 'block';
+    psSummaryBox.style.display = 'none';
+
+    // ── Rekap Barang: group by item_name ──────────────────────
+    if (psRekapWrap && psRekapTbody && psRekapTfoot) {
+      const rekapMap = {};
+      psDetails.forEach(row => {
+        const key = row.item_name || row.item_id || '-';
+        if (!rekapMap[key]) rekapMap[key] = { karung: 0, ekor: 0, kg: 0 };
+        rekapMap[key].karung += 1;
+        rekapMap[key].ekor  += row.qty_ekor_keluar || 0;
+        rekapMap[key].kg    += row.qty_kg_keluar   || 0;
+      });
+
+      psRekapTbody.innerHTML = '';
+      Object.entries(rekapMap).forEach(([nama, val]) => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td style="text-align:left;">${nama}</td>
+          <td style="text-align:right;">${val.karung}</td>
+          <td style="text-align:right;">${val.ekor}</td>
+          <td style="text-align:right;">${val.kg.toFixed(2)}</td>
+        `;
+        psRekapTbody.appendChild(tr);
+      });
+
+      psRekapTfoot.innerHTML = `
+        <tr style="font-weight:700; border-top:2px solid #d1d5db;">
+          <td style="text-align:left;">Total</td>
+          <td style="text-align:right;">${totalKarung}</td>
+          <td style="text-align:right;">${totalEkor}</td>
+          <td style="text-align:right;">${totalKg.toFixed(2)}</td>
+        </tr>
+      `;
+
+      psRekapWrap.style.display = 'block';
+    }
   }
 
   // psSubmitPickingSlip DEPRECATED — digantikan psSaveDraft + psPostDraft
