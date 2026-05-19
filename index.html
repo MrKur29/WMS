@@ -8368,16 +8368,18 @@ try {
         psStatusMessage.className   = 'status error'; return;
       }
 
-      // 2. Update qty tiap baris detail yang punya detail_id (loaded dari DB)
+      // 2. Update qty semua baris detail ke DB
+      // BUGFIX: Gunakan picking_slip_id + karung_id sebagai filter (bukan detail_id),
+      // karena baris yang dibuat di sesi ini (bukan di-load dari DB) tidak punya detail_id.
       const qtyErrors = [];
       for (const row of psDetails) {
-        if (!row.detail_id) continue; // baris baru yang ditambah saat draft → sudah dihandle fn_add_karung_to_draft
         const { error: dErr } = await sb.from('picking_slip_detail')
           .update({
             qty_ekor_keluar: row.qty_ekor_keluar,
             qty_kg_keluar:   row.qty_kg_keluar,
           })
-          .eq('id', row.detail_id);
+          .eq('picking_slip_id', currentDraftId)
+          .eq('karung_id', row.karung_id);
         if (dErr) qtyErrors.push(`${row.karung_id}: ${dErr.message}`);
       }
 
@@ -8469,6 +8471,31 @@ try {
     psStatusMessage.textContent = 'Memproses picking slip...';
     psStatusMessage.className   = 'status';
     if (psBtnSubmit) psBtnSubmit.disabled = true;
+
+    // ── Sync qty dari UI ke DB sebelum posting ──────────────
+    // Perubahan qty di input hanya tersimpan di psDetails (JS memory).
+    // fn_post_draft_picking_slip membaca langsung dari picking_slip_detail di DB,
+    // jadi kita HARUS update DB dulu agar qty yang diubah user ikut terbawa.
+    psStatusMessage.textContent = 'Menyinkronkan perubahan qty...';
+    const syncErrors = [];
+    for (const row of psDetails) {
+      const { error: syncErr } = await sb.from('picking_slip_detail')
+        .update({
+          qty_ekor_keluar: row.qty_ekor_keluar,
+          qty_kg_keluar:   row.qty_kg_keluar,
+        })
+        .eq('picking_slip_id', currentDraftId)
+        .eq('karung_id', row.karung_id);
+      if (syncErr) syncErrors.push(`${row.karung_id}: ${syncErr.message}`);
+    }
+    if (syncErrors.length) {
+      if (psBtnSubmit) psBtnSubmit.disabled = false;
+      if (_submitWin && !_submitWin.closed) _submitWin.close();
+      psStatusMessage.textContent = 'Gagal sync qty sebelum submit: ' + syncErrors.join('; ');
+      psStatusMessage.className   = 'status error'; return;
+    }
+    psStatusMessage.textContent = 'Memposting picking slip...';
+    // ── End sync ─────────────────────────────────────────────
 
     const { data, error } = await sb.rpc('fn_post_draft_picking_slip', { p_ps_id: currentDraftId });
 
