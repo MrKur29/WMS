@@ -597,6 +597,66 @@
     .rvps-modal-box .rvps-field-full { grid-column: 1 / -1; }
     .rvps-modal-box .rvps-btn-row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; justify-content: flex-end; }
     .rvps-confirm-box .rvps-btn-row { display: flex; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
+
+    /* ── Laporan Mutasi: sel clickable pindah_lokasi ── */
+    .lm-cell-clickable {
+      cursor: pointer;
+      color: #2563eb;
+      text-decoration: underline dotted;
+      font-weight: 600;
+    }
+    .lm-cell-clickable:hover { color: #1d4ed8; background: #eff6ff; }
+
+    /* ── Modal detail pindah_lokasi ── */
+    #lm-detail-overlay {
+      display: none;
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.45);
+      z-index: 9000;
+      align-items: flex-start;
+      justify-content: center;
+      padding: 32px 16px;
+      overflow-y: auto;
+    }
+    #lm-detail-overlay.open { display: flex; }
+    #lm-detail-box {
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.18);
+      width: 100%;
+      max-width: 900px;
+      padding: 20px 24px 24px;
+      box-sizing: border-box;
+    }
+    #lm-detail-box h3 { margin: 0 0 4px; font-size: 16px; color: #111827; }
+    #lm-detail-box .lm-det-sub { font-size: 12px; color: #6b7280; margin-bottom: 14px; }
+    #lm-detail-box .lm-det-status { font-size: 13px; color: #6b7280; margin: 8px 0; }
+    .lm-det-date-header {
+      background: #f0f9ff; border-left: 3px solid #2563eb;
+      padding: 5px 10px; font-weight: 700; font-size: 13px; color: #1d4ed8;
+      margin-top: 10px;
+    }
+    .lm-det-date-total {
+      background: #f8fafc; font-style: italic;
+      font-size: 12px; color: #374151;
+    }
+    #lm-detail-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    #lm-detail-table th {
+      background: #f3f4f6; text-align: left;
+      padding: 7px 10px; border-bottom: 2px solid #e5e7eb;
+      font-size: 12px; color: #374151; white-space: nowrap;
+    }
+    #lm-detail-table td {
+      padding: 6px 10px; border-bottom: 1px solid #f3f4f6;
+      vertical-align: top; font-size: 13px;
+    }
+    #lm-detail-table tr:hover td { background: #fafafa; }
+    #lm-det-close {
+      float: right; background: #e5e7eb; border: none;
+      border-radius: 6px; padding: 6px 14px; font-size: 13px;
+      cursor: pointer; margin-top: -4px;
+    }
+    #lm-det-close:hover { background: #d1d5db; }
 </style>
 </head>
 <body>
@@ -2730,6 +2790,31 @@
             </div>
           </div>
         </div>
+
+<!-- ── Modal Detail Pindah Lokasi (dari Laporan Mutasi) ── -->
+<div id="lm-detail-overlay">
+  <div id="lm-detail-box">
+    <button id="lm-det-close">✕ Tutup</button>
+    <h3 id="lm-det-title">Detail Pindah Lokasi</h3>
+    <div class="lm-det-sub" id="lm-det-sub"></div>
+    <div class="lm-det-status" id="lm-det-status">Memuat...</div>
+    <div style="overflow-x:auto; margin-top:6px;">
+      <table id="lm-detail-table">
+        <thead>
+          <tr>
+            <th>Karung ID</th>
+            <th style="text-align:right;">Ekor</th>
+            <th style="text-align:right;">Kg</th>
+            <th>Operator</th>
+            <th>Keterangan</th>
+            <th>Referensi</th>
+          </tr>
+        </thead>
+        <tbody id="lm-det-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
 
 <div id="page-laporan-harian-user" style="display:none;">
   <div class="container">
@@ -5989,11 +6074,15 @@ bdStatus.textContent = 'Form dikosongkan.';
     rsSetStatus('Membuat draft...', 'ok');
     await rsCreateDraft(); // sets currentReceiptId + currentReceiptNo
 
+    // Baca sumber dari UI untuk diteruskan ke fn_receipt_add_line
+    const sumberNow = document.getElementById('rs-sumber')?.value || null;
+
     // Insert semua line ke DB secara berurutan
     for (const karungId of lineOrder) {
       const { error } = await sb.rpc('fn_receipt_add_line', {
         p_receipt_id: currentReceiptId,
-        p_karung_id: karungId
+        p_karung_id:  karungId,
+        p_sumber:     sumberNow || null   // ✅ kirim sumber langsung ke fungsi
       });
       if (error) {
         // Rollback: reset state agar user bisa coba ulang
@@ -6043,13 +6132,34 @@ bdStatus.textContent = 'Form dikosongkan.';
     if (!sk) return { ok:false, message:'Karung tidak ditemukan' };
 
     const statusTxt = (sk.status_karung || '').toString();
-    if (statusTxt === 'tersedia' || statusTxt === 'terbuka') {
-      return { ok:false, message:'karung ini masih ada di gudang' };
-    }
-    if (statusTxt !== 'habis' && statusTxt !== 'draft') {
-      // fallback: bila enum tidak ada draft, tetap hanya izinkan habis
-      // namun kita tetap toleran: selain tersedia/terbuka -> ditolak jelas
-      return { ok:false, message:`Status karung tidak valid untuk receipt: ${statusTxt}` };
+    const isRetur = (document.getElementById('rs-sumber')?.value || '') === 'retur';
+
+    if (isRetur) {
+      // Retur: izinkan 'terbuka' (dijual sebagian) dan 'habis' (dijual semua)
+      // Blok 'tersedia' karena tidak ada yang terjual → tidak ada yang bisa diretur
+      if (statusTxt === 'tersedia') {
+        return { ok:false, message:'Karung masih penuh di gudang, tidak ada yang bisa diretur' };
+      }
+      if (!['habis','terbuka','draft'].includes(statusTxt)) {
+        return { ok:false, message:`Status karung tidak valid untuk retur: ${statusTxt}` };
+      }
+      // Untuk terbuka: pre-fill dengan qty terjual (bukan qty penuh)
+      if (statusTxt === 'terbuka') {
+        const qtyTerjualEkor = Number(sk.qty_ekor ?? 0) - Number(sk.qty_ekor_sisa ?? 0);
+        const qtyTerjualKg   = Number(sk.qty_kg   ?? 0) - Number(sk.qty_kg_sisa   ?? 0);
+        if (qtyTerjualEkor <= 0) {
+          return { ok:false, message:'Tidak ada qty terjual yang bisa diretur dari karung ini' };
+        }
+        return { ok:true, sk: { ...sk, qty_ekor: qtyTerjualEkor, qty_kg: qtyTerjualKg } };
+      }
+    } else {
+      // Sumber bukan retur: blok tersedia dan terbuka
+      if (statusTxt === 'tersedia' || statusTxt === 'terbuka') {
+        return { ok:false, message:'karung ini masih ada di gudang' };
+      }
+      if (statusTxt !== 'habis' && statusTxt !== 'draft') {
+        return { ok:false, message:`Status karung tidak valid untuk receipt: ${statusTxt}` };
+      }
     }
     return { ok:true, sk };
   }
@@ -11921,12 +12031,31 @@ function writePickingSlipToWindow(win, noDoc, header, detail) {
         ['saldo_akhir_ekor', true], ['saldo_akhir_kg', false]
       ];
 
+      // Semua jenis_perubahan yang bisa di-drill-down (bukan saldo kalkulasi)
+      const LM_CLICKABLE_JENIS = new Set([
+        'awal','abf','dari_lokasi_lain','chiller','retur',
+        'jual','pindah_lokasi','reprocess','selisih','rusak',
+        'digabung','gabungan'
+      ]);
+
       cells.forEach(([key, isInt]) => {
         const td = document.createElement('td');
         const v = r[key];
         td.textContent = isInt
           ? (Number(v ?? 0)).toLocaleString()
           : lmKg2(v);
+
+        // Cek apakah key ini termasuk jenis_perubahan yang bisa diklik
+        // key format: "{jenis}_ekor" atau "{jenis}_kg"
+        const jenisDariKey = key.replace(/_ekor$|_kg$/, '');
+        if (LM_CLICKABLE_JENIS.has(jenisDariKey)) {
+          td.classList.add('lm-cell-clickable');
+          td.title = `Klik untuk lihat rincian ${jenisDariKey} per tanggal`;
+          td.addEventListener('click', () => {
+            lmShowDetailMutasi(r.item_id, r.item_name || r.item_id || '-', jenisDariKey);
+          });
+        }
+
         tr.appendChild(td);
       });
 
@@ -12042,6 +12171,162 @@ function writePickingSlipToWindow(win, noDoc, header, detail) {
     const fileName = `Laporan_Mutasi_${dFrom}_sd_${dTo}.xlsx`;
     XLSX.writeFile(wb, fileName);
   }
+
+  // ── Detail Pindah Lokasi per Tanggal (modal drill-down) ──────────────────
+  (function () {
+    const overlay  = document.getElementById('lm-detail-overlay');
+    const detTitle = document.getElementById('lm-det-title');
+    const detSub   = document.getElementById('lm-det-sub');
+    const detStat  = document.getElementById('lm-det-status');
+    const detTbody = document.getElementById('lm-det-tbody');
+    const btnClose = document.getElementById('lm-det-close');
+
+    // Tutup modal
+    function closeModal() { overlay.classList.remove('open'); }
+    if (btnClose) btnClose.addEventListener('click', closeModal);
+    overlay.addEventListener('click', e => { if (e.target === overlay) closeModal(); });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
+    // Fungsi dipanggil dari render loop
+    window.lmShowDetailMutasi = async function (itemId, itemName, jenis) {
+      const dFrom = lmDateFromEl ? lmDateFromEl.value : '';
+      const dTo   = lmDateToEl   ? lmDateToEl.value   : '';
+
+      const labelJenis = jenis.replace(/_/g, ' ');
+      detTitle.textContent = `Detail "${labelJenis}" — ${itemName}`;
+      detSub.textContent   = `Rentang: ${dFrom} s/d ${dTo}`;
+      detStat.textContent  = 'Memuat data...';
+      detTbody.innerHTML   = '';
+      overlay.classList.add('open');
+
+      try {
+        // Step 1: ambil semua karung_id milik item ini
+        const { data: stokRows, error: stokErr } = await sb
+          .from('stok_karung')
+          .select('karung_id')
+          .eq('item_id', itemId);
+        if (stokErr) throw stokErr;
+
+        const karungIds = (stokRows || []).map(x => x.karung_id);
+        if (karungIds.length === 0) {
+          detStat.textContent = 'Tidak ada karung untuk item ini.';
+          return;
+        }
+
+        // Step 2: ambil log_karung dengan jenis_perubahan sesuai, dalam rentang tanggal
+        const dToEnd = dTo + 'T23:59:59+07:00'; // inklusif hari terakhir
+        const { data: logs, error: logErr } = await sb
+          .from('log_karung')
+          .select('waktu_log, karung_id, perubahan_ekor, perubahan_kg, operator, keterangan, referensi')
+          .in('karung_id', karungIds)
+          .eq('jenis_perubahan', jenis)
+          .gte('waktu_log', dFrom + 'T00:00:00+07:00')
+          .lte('waktu_log', dToEnd)
+          .order('waktu_log', { ascending: true });
+        if (logErr) throw logErr;
+
+        const rows = logs || [];
+        if (rows.length === 0) {
+          detStat.textContent = `Tidak ada transaksi "${labelJenis}" pada rentang ini.`;
+          return;
+        }
+
+        // Kelompokkan per tanggal
+        const byDate = {};
+        rows.forEach(r => {
+          const tgl = r.waktu_log.slice(0, 10); // 'YYYY-MM-DD'
+          if (!byDate[tgl]) byDate[tgl] = [];
+          byDate[tgl].push(r);
+        });
+
+        // Render per tanggal
+        let totalEkor = 0, totalKg = 0;
+        Object.keys(byDate).sort().forEach(tgl => {
+          const group = byDate[tgl];
+          let subEkor = 0, subKg = 0;
+
+          // Header tanggal
+          const trHead = document.createElement('tr');
+          const tdHead = document.createElement('td');
+          tdHead.colSpan = 6;
+          tdHead.className = 'lm-det-date-header';
+          // Format tanggal: Senin, 20 Mei 2026
+          const dtLabel = new Date(tgl + 'T12:00:00').toLocaleDateString('id-ID', {
+            weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
+          });
+          tdHead.textContent = '📅 ' + dtLabel;
+          trHead.appendChild(tdHead);
+          detTbody.appendChild(trHead);
+
+          // Baris per karung
+          group.forEach(r => {
+            const tr = document.createElement('tr');
+            const ekor = Number(r.perubahan_ekor ?? 0);
+            const kg   = Number(r.perubahan_kg   ?? 0);
+            subEkor += ekor; subKg += kg;
+
+            [
+              r.karung_id || '-',
+              ekor.toLocaleString(),
+              kg.toFixed(2),
+              r.operator || '-',
+              r.keterangan || '-',
+              r.referensi || '-'
+            ].forEach((val, i) => {
+              const td = document.createElement('td');
+              td.textContent = val;
+              if (i === 1 || i === 2) td.style.textAlign = 'right';
+              tr.appendChild(td);
+            });
+            detTbody.appendChild(tr);
+          });
+
+          // Subtotal per tanggal
+          const trSub = document.createElement('tr');
+          trSub.className = 'lm-det-date-total';
+          const cells = [
+            `Subtotal (${group.length} transaksi)`,
+            subEkor.toLocaleString(),
+            subKg.toFixed(2),
+            '', '', ''
+          ];
+          cells.forEach((val, i) => {
+            const td = document.createElement('td');
+            td.textContent = val;
+            if (i === 0) td.style.cssText = 'font-style:italic; color:#374151; padding-left:10px;';
+            if (i === 1 || i === 2) td.style.cssText = 'text-align:right; font-weight:600; color:#1d4ed8;';
+            trSub.appendChild(td);
+          });
+          detTbody.appendChild(trSub);
+
+          totalEkor += subEkor; totalKg += subKg;
+        });
+
+        // Baris GRAND TOTAL
+        const trTotal = document.createElement('tr');
+        trTotal.style.cssText = 'font-weight:700; background:#f0f9ff; border-top:2px solid #93c5fd;';
+        [
+          `TOTAL (${rows.length} transaksi, ${Object.keys(byDate).length} hari)`,
+          totalEkor.toLocaleString(),
+          totalKg.toFixed(2),
+          '', '', ''
+        ].forEach((val, i) => {
+          const td = document.createElement('td');
+          td.textContent = val;
+          if (i === 1 || i === 2) td.style.cssText = 'text-align:right; font-weight:700; color:#1d4ed8;';
+          trTotal.appendChild(td);
+        });
+        detTbody.appendChild(trTotal);
+
+        detStat.textContent = `${rows.length} transaksi ditemukan di ${Object.keys(byDate).length} hari.`;
+
+      } catch (err) {
+        console.error(err);
+        detStat.textContent = 'Gagal memuat detail: ' + (err.message || err);
+      }
+    };
+  })();
+  // ── End Detail Pindah Lokasi ─────────────────────────────────────────────
 
 
 // FORM REVISI KARUNG (ABF)
