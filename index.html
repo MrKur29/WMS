@@ -2646,6 +2646,23 @@
           Tampilkan Laporan
         </button>
       </div>
+      <div class="field" style="flex:0 0 auto; align-self:flex-end;">
+        <label>&nbsp;</label>
+        <div style="display:flex; gap:8px;">
+          <button type="button" class="btn btn-small" id="lb-btn-export-rak"
+            style="background:#16a34a;color:#fff;display:none;" title="Export laporan per rak ke CSV (desimal pakai titik)">
+            ↓ CSV per Rak
+          </button>
+          <button type="button" class="btn btn-small" id="lb-btn-export-item"
+            style="background:#16a34a;color:#fff;display:none;" title="Export laporan per item ke CSV (desimal pakai titik)">
+            ↓ CSV per Item
+          </button>
+          <button type="button" class="btn btn-small" id="lb-btn-export-detail"
+            style="background:#16a34a;color:#fff;display:none;" title="Export rincian per karung ke CSV (desimal pakai titik)">
+            ↓ CSV Rincian
+          </button>
+        </div>
+      </div>
     </div>
 
     <div id="lb-status-batch" class="status"></div>
@@ -10353,8 +10370,15 @@ let lssDetailSelected = null; // row object {item_id,item_name,...}
   const lbWarningPallet    = document.getElementById('lb-warning-pallet');
   const lbDetailControls   = document.getElementById('lb-detail-controls');
   const lbFilterFlaggedOnly = document.getElementById('lb-filter-flagged-only');
+  const lbBtnExportRak    = document.getElementById('lb-btn-export-rak');
+  const lbBtnExportItem   = document.getElementById('lb-btn-export-item');
+  const lbBtnExportDetail = document.getElementById('lb-btn-export-detail');
   // Simpan hasil rendering detail terakhir supaya filter bisa toggle tanpa query ulang
   let lbLastDetailList = [];
+  // Simpan data per-rak dan per-item untuk export CSV
+  let lbLastPerRakList  = [];
+  let lbLastPerItemList = [];
+  let lbLastBatchId     = '';
 
   async function initLaporanBatchOnce() {
     if (laporanBatchInitialized) return;
@@ -10401,6 +10425,9 @@ let lssDetailSelected = null; // row object {item_id,item_name,...}
     if (lbFilterFlaggedOnly) {
       lbFilterFlaggedOnly.addEventListener('change', renderLaporanBatchDetail);
     }
+    if (lbBtnExportRak)    lbBtnExportRak.addEventListener('click',    exportCsvPerRak);
+    if (lbBtnExportItem)   lbBtnExportItem.addEventListener('click',   exportCsvPerItem);
+    if (lbBtnExportDetail) lbBtnExportDetail.addEventListener('click', exportCsvDetail);
   }
 
   async function loadBatchListForDate() {
@@ -10836,12 +10863,20 @@ let lssDetailSelected = null; // row object {item_id,item_name,...}
     // Simpan meta utk renderer (batchId, rakFilter) lewat properti tambahan di array
     detailList.__batchId   = batchId;
     detailList.__rakFilter = rakFilter;
-    lbLastDetailList = detailList;
+    lbLastDetailList  = detailList;
+    lbLastPerRakList  = perRakList;
+    lbLastPerItemList = perItemList;
+    lbLastBatchId     = batchId;
 
     renderLaporanBatchDetail();
 
     lbStatusMessage.textContent = 'Laporan berhasil ditampilkan.';
     lbStatusMessage.className = 'status success';
+
+    // Tampilkan tombol export
+    if (lbBtnExportRak)    lbBtnExportRak.style.display    = perRakList.length  > 0 ? '' : 'none';
+    if (lbBtnExportItem)   lbBtnExportItem.style.display   = perItemList.length > 0 ? '' : 'none';
+    if (lbBtnExportDetail) lbBtnExportDetail.style.display = detailList.length  > 0 ? '' : 'none';
   }
 
   // ===== Renderer terpisah supaya filter toggle bisa re-render tanpa query ulang =====
@@ -10979,6 +11014,83 @@ let lssDetailSelected = null; // row object {item_id,item_name,...}
       lbTbodyDetail.appendChild(tr);
     });
   }
+
+  // ===== HELPER: download file CSV =====
+  function downloadCsv(filename, rows) {
+    const bom = '﻿'; // BOM agar Excel baca UTF-8 dengan benar
+    const csv = bom + rows.map(r =>
+      r.map(cell => {
+        const s = cell === null || cell === undefined ? '' : String(cell);
+        // Bungkus dengan tanda kutip jika ada koma, kutip, atau newline
+        return (s.includes(',') || s.includes('"') || s.includes('\n'))
+          ? '"' + s.replace(/"/g, '""') + '"'
+          : s;
+      }).join(',')
+    ).join('\r\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  function exportCsvPerRak() {
+    if (!lbLastPerRakList.length) return;
+    const rows = [
+      ['Rak ABF', 'Item', 'Total Ekor', 'Total Kg']
+    ];
+    lbLastPerRakList.forEach(r => {
+      rows.push([
+        r.rak_abf,
+        r.item_name,
+        r.total_ekor,
+        r.total_kg.toFixed(2)
+      ]);
+    });
+    downloadCsv(`laporan_batch_${lbLastBatchId}_per_rak.csv`, rows);
+  }
+
+  function exportCsvPerItem() {
+    if (!lbLastPerItemList.length) return;
+    const rows = [
+      ['Item', 'Total Ekor', 'Total Kg']
+    ];
+    lbLastPerItemList.forEach(r => {
+      rows.push([
+        r.item_name,
+        r.total_ekor,
+        r.total_kg.toFixed(2)
+      ]);
+    });
+    downloadCsv(`laporan_batch_${lbLastBatchId}_per_item.csv`, rows);
+  }
+
+  function exportCsvDetail() {
+    if (!lbLastDetailList.length) return;
+    const onlyFlagged = !!(lbFilterFlaggedOnly && lbFilterFlaggedOnly.checked);
+    const list = onlyFlagged ? lbLastDetailList.filter(r => r.is_flagged) : lbLastDetailList;
+    const rows = [
+      ['Rak ABF', 'Karung ID', 'Item', 'Ekor', 'Kg', 'Tgl Produksi', 'Status', 'Pallet']
+    ];
+    list.forEach(r => {
+      rows.push([
+        r.rak_abf,
+        r.karung_id,
+        r.item_name,
+        r.qty_ekor,
+        r.qty_kg.toFixed(2),
+        r.tgl_produksi || '',
+        r.status_karung || '',
+        r.is_flagged ? 'BELUM DIDAFTARKAN' : (r.pallet_id || '')
+      ]);
+    });
+    downloadCsv(`laporan_batch_${lbLastBatchId}_rincian_karung.csv`, rows);
+  }
+
 function openPickingSlipWindow(noDoc, header, detail) {
   // --- 1) REKAP PER ITEM UNTUK LEMBAR 1 ---
   const perItemMap = {};
@@ -11246,6 +11358,7 @@ function openPickingSlipWindow(noDoc, header, detail) {
 
   const win = window.open("", "_blank", "width=800,height=900");
   if (!win) { alert('Popup diblokir browser. Izinkan popup untuk halaman ini lalu coba lagi.'); return; }
+  win.document.open();
   win.document.write(slipHTML);
   win.document.close();
   win.focus();
