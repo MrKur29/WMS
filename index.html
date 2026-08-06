@@ -9207,7 +9207,7 @@ function psBeep(kind) {
         psBeep('err');
         return;
       }
-      psDetails.push({
+      psDetails.unshift({
         karung_id: karung.karung_id, item_id: karung.item_id, item_name: itemName,
         qty_ekor_sisa: sisaEkor, qty_kg_sisa: sisaKg,
         qty_ekor_keluar: sisaEkor, qty_kg_keluar: sisaKg
@@ -9222,7 +9222,7 @@ function psBeep(kind) {
     }
 
     // MODE LOKAL (belum ada draft) → tambah ke psDetails saja
-    psDetails.push({
+    psDetails.unshift({
       karung_id: karung.karung_id,
       item_id: karung.item_id,
       item_name: itemName,
