@@ -5276,7 +5276,8 @@ if (window.innerWidth <= 768) {
     "RAK-01","RAK-02","RAK-03","RAK-04","RAK-05",
     "RAK-06","RAK-07","RAK-08","RAK-09","RAK-10",
     "RAK-11","RAK-12","RAK-13","RAK-14","RAK-15",
-    "RAK-16","RAK-17","RAK-18","RAK-19","RAK-20"
+    "RAK-16","RAK-17","RAK-18","RAK-19","RAK-20",
+    "RAK-21","RAK-22","RAK-23","RAK-24"
   ];
 
   let items = [];
@@ -6748,7 +6749,7 @@ let tambahBatchInitialized = false;
 
     function buildRakMappingUI() {
       if (!tbRakMappingEl) return;
-      const racks = Array.from({ length: 20 }, (_, i) => `RAK-${String(i + 1).padStart(2, '0')}`);
+      const racks = Array.from({ length: 24 }, (_, i) => `RAK-${String(i + 1).padStart(2, '0')}`);
       const mesinOptions = ['','1','2','3','4','5','6'];
 
       const grid = document.createElement('div');
