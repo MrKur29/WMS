@@ -657,6 +657,44 @@
       cursor: pointer; margin-top: -4px;
     }
     #lm-det-close:hover { background: #d1d5db; }
+
+    /* ===== PRINT: Laporan Stok Semua Barang ===== */
+    @media print {
+      body.printing-lss #login-page,
+      body.printing-lss .app-header,
+      body.printing-lss .app-sidebar,
+      body.printing-lss #content > div:not(#page-laporan-stok-semua) {
+        display: none !important;
+      }
+      body.printing-lss #page-laporan-stok-semua .top-bar,
+      body.printing-lss #page-laporan-stok-semua .section-title,
+      body.printing-lss #page-laporan-stok-semua .field-row,
+      body.printing-lss #page-laporan-stok-semua #lss-status {
+        display: none !important;
+      }
+      body.printing-lss #page-laporan-stok-semua {
+        display: block !important;
+      }
+      body.printing-lss .page,
+      body.printing-lss .app-shell,
+      body.printing-lss .app-main {
+        max-width: none !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        display: block !important;
+      }
+      body.printing-lss #lss-print-header {
+        display: block !important;
+      }
+      body.printing-lss #lss-summary {
+        display: block !important;
+        margin-top: 10px !important;
+      }
+      body.printing-lss #lss-table {
+        display: table !important;
+        width: 100%;
+      }
+    }
 </style>
 </head>
 <body>
@@ -2545,6 +2583,14 @@
       <div><span id="lss-userInfo"></span></div>
     </div>
 
+    <!-- Header ini hanya tampil saat print -->
+    <div id="lss-print-header" style="display:none;">
+      <h2 style="margin:0 0 2px 0;">Laporan Stok Semua Barang</h2>
+      <div style="font-size:12px; color:#111;">Status: Tersedia &amp; Terbuka</div>
+      <div style="font-size:12px; color:#111;">Tanggal Cetak: <span id="lss-print-date"></span></div>
+      <hr style="margin:8px 0 12px 0; border:none; border-top:1px solid #999;" />
+    </div>
+
     <div class="section-title">1. Filter</div>
     <div class="field-row">
       <div class="field">
@@ -2554,9 +2600,9 @@
           Sumber data: RPC <code>fn_laporan_stok_semua_barang()</code>. Status yang dihitung hanya <code>tersedia</code> &amp; <code>terbuka</code>.
         </div>
       </div>
-      <div class="field" style="flex:0 0 180px;">
-        <label>&nbsp;</label>
-        <button type="button" class="btn btn-primary btn-small" id="lss-btn-refresh">Refresh</button>
+      <div class="field" style="flex:0 0 180px; display:flex; gap:6px; align-items:flex-end;">
+        <button type="button" class="btn btn-primary btn-small" id="lss-btn-refresh" style="flex:1;">Refresh</button>
+        <button type="button" class="btn btn-small" id="lss-btn-print" style="flex:1; background:#374151; color:#fff;" title="Cetak laporan ini">🖨️ Print</button>
       </div>
     </div>
 
@@ -2575,6 +2621,7 @@
         </tr>
       </thead>
       <tbody id="lss-tbody"></tbody>
+      <tfoot id="lss-tfoot" style="display:none;"></tfoot>
     </table>
     <div id="lss-detail" style="display:none; margin-top:12px;">
       <div class="section-title" style="margin-top:0; display:flex; align-items:center; justify-content:space-between;">
@@ -10084,10 +10131,14 @@ const rows = await lopFetchAktifStokKarungPaged((loaded, lastBatch) => {
   const lssUserInfoEl  = document.getElementById('lss-userInfo');
   const lssKeywordEl   = document.getElementById('lss-keyword');
   const lssBtnRefresh  = document.getElementById('lss-btn-refresh');
+  const lssBtnPrint    = document.getElementById('lss-btn-print');
+  const lssPrintHeaderEl = document.getElementById('lss-print-header');
+  const lssPrintDateEl   = document.getElementById('lss-print-date');
   const lssStatusEl    = document.getElementById('lss-status');
   const lssSummaryEl   = document.getElementById('lss-summary');
   const lssTableEl     = document.getElementById('lss-table');
   const lssTbodyEl     = document.getElementById('lss-tbody');
+  const lssTfootEl     = document.getElementById('lss-tfoot');
 
   let lssRowsCache = [];
 let lssDetailSelected = null; // row object {item_id,item_name,...}
@@ -10243,6 +10294,7 @@ let lssDetailSelected = null; // row object {item_id,item_name,...}
     lssTbodyEl.innerHTML = '';
     lssTableEl.style.display = 'none';
     lssSummaryEl.style.display = 'none';
+    if (lssTfootEl) { lssTfootEl.innerHTML = ''; lssTfootEl.style.display = 'none'; }
 
     if (!filtered || filtered.length === 0) {
       lssSetStatus(kw ? 'Tidak ada data yang cocok dengan filter.' : 'Tidak ada stok untuk status tersedia/terbuka.', '');
@@ -10293,8 +10345,44 @@ let lssDetailSelected = null; // row object {item_id,item_name,...}
 
     lssSummaryEl.style.display = 'block';
     lssTableEl.style.display = 'table';
+
+    if (lssTfootEl) {
+      lssTfootEl.innerHTML =
+        '<tr style="font-weight:bold; background:#f3f4f6;">' +
+          '<td>TOTAL</td>' +
+          `<td>${grandKarung}</td>` +
+          `<td>${grandEkor}</td>` +
+          `<td>${lssNum2(grandKg)}</td>` +
+        '</tr>';
+      lssTfootEl.style.display = 'table-footer-group';
+    }
+
     lssSetStatus(`Menampilkan ${filtered.length} item.`, 'success');
   }
+
+  function lssFormatPrintDate() {
+    const d = new Date();
+    const pad = n => String(n).padStart(2, '0');
+    const hari  = ['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'][d.getDay()];
+    const bulan = ['Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'][d.getMonth()];
+    return `${hari}, ${d.getDate()} ${bulan} ${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  }
+
+  function lssHandlePrint() {
+    if (!lssRowsCache || lssRowsCache.length === 0) {
+      lssSetStatus('Tidak ada data untuk dicetak. Klik Refresh dulu.', 'error');
+      return;
+    }
+    if (lssPrintDateEl) lssPrintDateEl.textContent = lssFormatPrintDate();
+    if (lssPrintHeaderEl) lssPrintHeaderEl.style.display = 'block';
+    document.body.classList.add('printing-lss');
+    window.print();
+  }
+
+  window.addEventListener('afterprint', () => {
+    document.body.classList.remove('printing-lss');
+    if (lssPrintHeaderEl) lssPrintHeaderEl.style.display = 'none';
+  });
 
   async function lssLoadFromServer() {
     lssSetStatus('Mengambil data dari server...', '');
@@ -10337,6 +10425,9 @@ let lssDetailSelected = null; // row object {item_id,item_name,...}
 
     if (lssBtnRefresh) {
       lssBtnRefresh.addEventListener('click', lssLoadFromServer);
+    }
+    if (lssBtnPrint) {
+      lssBtnPrint.addEventListener('click', lssHandlePrint);
     }
     if (lssKeywordEl) {
       lssKeywordEl.addEventListener('input', () => {
