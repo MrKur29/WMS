@@ -13240,5 +13240,234 @@ function writePickingSlipToWindow(win, noDoc, header, detail) {
   </div>
 </div>
 
+<!-- ===== Pilihan customer dari master_customer (picking slip) — ditambahkan 06/10/2026 ===== -->
+<style>
+  .ps-cust-dd{position:absolute;left:0;right:0;top:100%;z-index:1000;margin-top:2px;max-height:300px;overflow-y:auto;
+    background:#fff;border:1px solid #cbd5e1;border-radius:8px;box-shadow:0 8px 24px rgba(15,23,42,.15);font-size:14px;}
+  .ps-cust-dd .ps-cust-opt{padding:8px 10px;cursor:pointer;color:#0f172a;line-height:1.3;}
+  .ps-cust-dd .ps-cust-opt:hover,.ps-cust-dd .ps-cust-opt.active{background:#e0f2fe;}
+  .ps-cust-dd .ps-cust-opt mark{background:#fde68a;color:inherit;padding:0;border-radius:2px;}
+  .ps-cust-dd .ps-cust-empty{padding:8px 10px;color:#64748b;font-style:italic;}
+  .ps-cust-dd .ps-cust-add{position:sticky;bottom:0;padding:9px 10px;cursor:pointer;color:#047857;font-weight:600;
+    background:#f0fdf4;border-top:1px solid #d1fae5;}
+  .ps-cust-dd .ps-cust-add:hover,.ps-cust-dd .ps-cust-add.active{background:#dcfce7;}
+  .ps-cust-modal{position:fixed;inset:0;z-index:5000;background:rgba(15,23,42,.45);display:flex;align-items:center;justify-content:center;padding:16px;}
+  .ps-cust-modal-box{background:#fff;border-radius:12px;width:100%;max-width:440px;padding:18px 18px 14px;box-shadow:0 20px 50px rgba(15,23,42,.3);color:#0f172a;font-size:14px;}
+  .ps-cust-modal-box h3{margin:0 0 10px;font-size:17px;}
+  .ps-cust-modal-box label{display:block;font-size:13px;color:#475569;margin-bottom:4px;}
+  .ps-cust-modal-box input{width:100%;box-sizing:border-box;padding:9px 10px;border:1px solid #cbd5e1;border-radius:8px;font-size:15px;}
+  .ps-cust-sim{margin-top:10px;padding:8px 10px;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;font-size:13px;}
+  .ps-cust-sim b{display:block;margin-bottom:4px;color:#92400e;}
+  .ps-cust-sim a{display:block;padding:4px 0;color:#1d4ed8;cursor:pointer;text-decoration:none;}
+  .ps-cust-sim a:hover{text-decoration:underline;}
+  .ps-cust-msg{margin-top:8px;font-size:13px;min-height:16px;}
+  .ps-cust-msg.err{color:#b91c1c;}
+  .ps-cust-btns{display:flex;gap:8px;justify-content:flex-end;margin-top:12px;}
+  .ps-cust-btns button{padding:8px 14px;border-radius:8px;border:1px solid #cbd5e1;background:#fff;cursor:pointer;font-size:14px;}
+  .ps-cust-btns button.primary{background:#059669;border-color:#059669;color:#fff;font-weight:600;}
+  .ps-cust-btns button:disabled{opacity:.6;cursor:default;}
+</style>
+<script>
+(function () {
+  const input = document.getElementById('ps-nama-customer');
+  if (!input || typeof sb === 'undefined') return;
+  input.setAttribute('autocomplete', 'off');
+  const field = input.parentElement;
+  if (getComputedStyle(field).position === 'static') field.style.position = 'relative';
+  const dd = document.createElement('div');
+  dd.className = 'ps-cust-dd'; dd.style.display = 'none';
+  field.appendChild(dd);
+
+  let list = [], loadedAt = 0, loading = null, shown = [], activeIdx = -1, addVisible = false;
+  const norm = s => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  const esc  = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+  // Rapikan huruf: "TOKO MAJU" / "toko maju" -> "Toko Maju"; singkatan tetap huruf besar
+  const KEEP = new Set(['PT','CV','FC','UD','MBG','RSU','HM','AR','MP','ST','AA','RM','NN','BHL','KFC','CK']);
+  const LOWER = new Set(['by','dan','and','of']);
+  function tidy(name) {
+    let s = String(name || '').trim().replace(/\s+/g, ' ');
+    s = s.replace(/^PT\.?\s*/i, 'PT. ').replace(/^CV\.?\s*/i, 'CV. ');
+    let first = true;
+    return s.split(/(\s+|\/|\(|\)|-)/).map(p => {
+      if (!p || /^(\s+|\/|\(|\)|-)$/.test(p)) { if (p === '/' || p === '(') first = true; return p; }
+      const m = p.match(/^([^A-Za-z]*)([A-Za-z']+)(.*)$/);
+      if (!m) { first = false; return p; }
+      let [, pre, core, post] = m;
+      if (KEEP.has(core.toUpperCase())) core = core.toUpperCase();
+      else if (!first && LOWER.has(core.toLowerCase())) core = core.toLowerCase();
+      else if (core === core.toUpperCase() || core === core.toLowerCase()) core = core[0].toUpperCase() + core.slice(1).toLowerCase();
+      first = false;
+      return pre + core + post;
+    }).join('');
+  }
+
+  async function load(force) {
+    if (!force && list.length && Date.now() - loadedAt < 5 * 60 * 1000) return;
+    if (loading) return loading;
+    loading = (async () => {
+      const { data, error } = await sb.from('master_customer').select('id, nama').eq('aktif', true).order('nama');
+      if (!error && data) { list = data.map(r => ({ nama: r.nama, key: norm(r.nama) })); loadedAt = Date.now(); }
+      else if (error) console.warn('master_customer:', error.message);
+    })();
+    try { await loading; } finally { loading = null; }
+  }
+
+  function highlight(nama, tokens) {
+    let html = esc(nama);
+    tokens.forEach(t => {
+      if (!t) return;
+      const re = new RegExp('(' + t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ')', 'ig');
+      html = html.replace(re, '<mark>$1</mark>');
+    });
+    return html;
+  }
+
+  function render() {
+    const q = norm(input.value);
+    const tokens = q ? q.split(' ') : [];
+    shown = list.filter(c => tokens.every(t => c.key.includes(t)));
+    if (q) shown.sort((a, b) => (b.key.startsWith(q) - a.key.startsWith(q)) || a.nama.localeCompare(b.nama));
+    const exact = q && list.some(c => c.key === q);
+    addVisible = !!list.length && input.value.trim().length >= 3 && !exact;
+    activeIdx = shown.length ? 0 : (addVisible ? 0 : -1);
+    let html;
+    if (!list.length) html = '<div class="ps-cust-empty">Memuat daftar customer…</div>';
+    else if (!shown.length) html = '<div class="ps-cust-empty">Tidak ada di master customer</div>';
+    else html = shown.slice(0, 100).map((c, i) =>
+        `<div class="ps-cust-opt${i === activeIdx ? ' active' : ''}" data-i="${i}">${highlight(c.nama, tokens)}</div>`).join('');
+    if (addVisible) html += `<div class="ps-cust-add${!shown.length ? ' active' : ''}" data-add="1">＋ Tambah pelanggan baru: “${esc(tidy(input.value))}”</div>`;
+    dd.innerHTML = html;
+    dd.style.display = 'block';
+  }
+
+  function items() { return dd.querySelectorAll('.ps-cust-opt, .ps-cust-add'); }
+  function setActive(i) {
+    const opts = items(); if (!opts.length) return;
+    activeIdx = (i + opts.length) % opts.length;
+    opts.forEach((o, k) => o.classList.toggle('active', k === activeIdx));
+    opts[activeIdx].scrollIntoView({ block: 'nearest' });
+  }
+  function setValue(nama) {
+    input.value = nama;
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+  function choose(i) { const c = shown[i]; if (!c) return; hide(); setValue(c.nama); }
+  function hide() { dd.style.display = 'none'; }
+
+  // ---- Tambah pelanggan baru ----
+  const STOP = new Set(['pt','cv','fc','ud','the','dan','by','and','toko','warung','warunk','ayam','nasi','cafe','kopi','hotel','catering',
+    'kitchen','chicken','fried','group','indonesia','resto','restaurant','rm','bakery','dapur','rumah','kedai','ibu','bu','pak','bapak']);
+  function bigrams(s) { s = s.replace(/ /g, ''); const a = []; for (let i = 0; i < s.length - 1; i++) a.push(s.slice(i, i + 2)); return a; }
+  function dice(a, b) {
+    const A = bigrams(a), B = bigrams(b); if (!A.length || !B.length) return 0;
+    const m = new Map(); A.forEach(x => m.set(x, (m.get(x) || 0) + 1));
+    let n = 0; B.forEach(x => { if (m.get(x) > 0) { n++; m.set(x, m.get(x) - 1); } });
+    return 2 * n / (A.length + B.length);
+  }
+  function similar(nama) {
+    const k = norm(nama);
+    const toks = k.split(' ').filter(t => t.length >= 3 && !STOP.has(t));
+    return list.map(c => {
+      const ct = c.key.split(' ');
+      const share = toks.filter(t => ct.some(x => x === t || (t.length >= 4 && (x.startsWith(t) || t.startsWith(x) && x.length >= 4)))).length;
+      return { c, score: share * 0.5 + dice(k, c.key) };
+    }).filter(x => x.score >= 0.55).sort((a, b) => b.score - a.score).slice(0, 6).map(x => x.c);
+  }
+
+  function openAdd() {
+    hide();
+    const box = document.createElement('div');
+    box.className = 'ps-cust-modal';
+    box.innerHTML = `<div class="ps-cust-modal-box" role="dialog" aria-modal="true">
+      <h3>Tambah pelanggan baru</h3>
+      <label for="ps-cust-new">Nama pelanggan</label>
+      <input id="ps-cust-new" type="text" maxlength="120" autocomplete="off" />
+      <div class="ps-cust-sim" style="display:none"></div>
+      <div class="ps-cust-msg"></div>
+      <div class="ps-cust-btns"><button type="button" data-act="batal">Batal</button>
+        <button type="button" class="primary" data-act="simpan">Simpan &amp; pilih</button></div></div>`;
+    document.body.appendChild(box);
+    const nin = box.querySelector('#ps-cust-new'), sim = box.querySelector('.ps-cust-sim'),
+          msg = box.querySelector('.ps-cust-msg'), btnSave = box.querySelector('[data-act="simpan"]');
+    nin.value = tidy(input.value);
+    const close = () => { box.remove(); input.focus(); };
+    function showSimilar() {
+      const s = similar(nin.value);
+      if (!s.length) { sim.style.display = 'none'; return; }
+      sim.innerHTML = '<b>Mungkin maksudnya salah satu ini? Klik untuk memilih:</b>' +
+        s.map((c, i) => `<a data-sim="${i}">${esc(c.nama)}</a>`).join('');
+      sim.style.display = 'block';
+      sim.querySelectorAll('a').forEach(a => a.onclick = () => { box.remove(); setValue(s[+a.dataset.sim].nama); });
+    }
+    showSimilar();
+    nin.addEventListener('input', showSimilar);
+    nin.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); save(); } if (e.key === 'Escape') close(); });
+    box.addEventListener('click', e => { if (e.target === box) close(); });
+    box.querySelector('[data-act="batal"]').onclick = close;
+    btnSave.onclick = save;
+    async function save() {
+      const nama = tidy(nin.value);
+      if (nama.length < 3) { msg.className = 'ps-cust-msg err'; msg.textContent = 'Nama minimal 3 karakter.'; return; }
+      btnSave.disabled = true; msg.className = 'ps-cust-msg'; msg.textContent = 'Menyimpan…';
+      const { data, error } = await sb.rpc('fn_tambah_customer', { p_nama: nama });
+      btnSave.disabled = false;
+      if (error) { msg.className = 'ps-cust-msg err'; msg.textContent = error.message || 'Gagal menyimpan.'; return; }
+      await load(true);
+      box.remove();
+      setValue(data.nama);
+      if (typeof psStatusMessage !== 'undefined' && psStatusMessage) {
+        psStatusMessage.textContent = data.baru ? `Pelanggan "${data.nama}" ditambahkan ke master customer.`
+                                                : `"${data.nama}" sudah ada di master — langsung dipilih.`;
+        psStatusMessage.className = 'status';
+      }
+    }
+    setTimeout(() => { nin.focus(); nin.select(); }, 0);
+  }
+
+  input.addEventListener('focus', async () => { render(); await load(); if (document.activeElement === input) render(); });
+  input.addEventListener('input', e => { if (e.isTrusted) render(); });
+  input.addEventListener('keydown', e => {
+    if (dd.style.display === 'none' && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) { render(); return; }
+    if (e.key === 'ArrowDown') { e.preventDefault(); setActive(activeIdx + 1); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); setActive(activeIdx - 1); }
+    else if (e.key === 'Enter' && dd.style.display !== 'none' && activeIdx >= 0) {
+      const el = items()[activeIdx]; if (!el) return;
+      e.preventDefault();
+      if (el.dataset.add) openAdd(); else choose(+el.dataset.i);
+    }
+    else if (e.key === 'Escape' || e.key === 'Tab') hide();
+  });
+  dd.addEventListener('mousedown', e => e.preventDefault());
+  dd.addEventListener('click', e => {
+    if (e.target.closest('.ps-cust-add')) return openAdd();
+    const o = e.target.closest('.ps-cust-opt'); if (o) choose(+o.dataset.i);
+  });
+  // Wajib pilih dari daftar: saat keluar dari kolom, nama yang tidak ada di master dikosongkan
+  const warn = document.createElement('div');
+  warn.style.cssText = 'color:#b91c1c;font-size:12px;margin-top:4px;display:none;';
+  field.appendChild(warn);
+  function validate() {
+    const v = input.value.trim();
+    if (!v || !list.length || document.querySelector('.ps-cust-modal')) { warn.style.display = 'none'; input.style.borderColor = ''; return; }
+    const hit = list.find(c => c.key === norm(v));
+    if (hit) {
+      if (input.value !== hit.nama) setValue(hit.nama);
+      warn.style.display = 'none'; input.style.borderColor = '';
+    } else {
+      warn.textContent = `"${v}" tidak ada di master customer. Pilih dari daftar, atau pilih "+ Tambah pelanggan baru".`;
+      warn.style.display = 'block'; input.style.borderColor = '#dc2626';
+      input.value = '';
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+  }
+  input.addEventListener('blur', () => setTimeout(() => { hide(); validate(); }, 150));
+  input.addEventListener('input', e => { if (e.isTrusted) { warn.style.display = 'none'; input.style.borderColor = ''; } });
+})();
+</script>
+<!-- ===== akhir blok pilihan customer ===== -->
+
 </body>
 </html>
